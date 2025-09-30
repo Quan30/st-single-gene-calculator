@@ -1,0 +1,22 @@
+
+streamlit==1.49.1
+pandas==2.2.3
+numpy==1.26.4
+scipy==1.11.4
+matplotlib==3.10.0
+
+anndata==0.10.9
+mudata==0.3.1
+scanpy==1.10.3
+scvi-tools==1.1.2
+
+pyro-ppl==1.8.6
+jax==0.4.20
+jaxlib==0.4.20
+
+# PyTorch (CPU wheel; Cloud has no GPU)
+torch --extra-index-url https://download.pytorch.org/whl/cpu
+
+pyarrow==21.0.0
+
+-e ./PerTurbo

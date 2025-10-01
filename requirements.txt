@@ -16,6 +16,7 @@ jaxlib==0.4.20
 
 # PyTorch (CPU wheel; Cloud has no GPU)
 torch --extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.4.1
 
 pyarrow==21.0.0
 

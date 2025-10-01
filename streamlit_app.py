@@ -90,8 +90,8 @@ with st.expander("ℹ️ How this works", expanded=False):
 # Sidebar: Simulation & Test cfg
 # ------------------------------
 st.sidebar.header("⚙️ Simulation")
-model_dir = st.sidebar.text_input("Model directory", value="../save_model")
-real_path = st.sidebar.text_input("Parameters from Real data (.npz)", value="../save_model/model/reference_stats_compact.npz")
+model_dir = st.sidebar.text_input("Model directory", value="save_model")
+real_path = st.sidebar.text_input("Parameters from Real data (.npz)", value="save_model/model/reference_stats_compact.npz")
 accelerator = st.sidebar.selectbox("Accelerator (for simulation)", ["cpu", "gpu"], index=0)
 
 st.sidebar.divider()

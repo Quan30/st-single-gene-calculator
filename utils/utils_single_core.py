@@ -109,13 +109,10 @@ def make_minimal_mdata(gene_names, *, layer=None, obs_cols=None, grna_var_names=
     obs = pd.DataFrame(index=pd.Index(["dummy_cell"], name="cell"))
 
     # pre-seed known categorical keys your registry expects
-    if "prep_batch" not in obs.columns:
-        obs["prep_batch"] = pd.Categorical([np.nan], categories=[])
-
-    # also add any user-provided obs categorical columns
-    for c in obs_cols:
+    obs["prep_batch"] = pd.Series([None], dtype="object")
+    for c in obs_cols or []:
         if c not in obs.columns:
-            obs[c] = pd.Categorical([np.nan], categories=[])
+            obs[c] = pd.Series([None], dtype="object")
 
     # ------ RNA modality: 1 row, non-zero counts ------
     n_genes = len(gene_names)
@@ -151,30 +148,29 @@ def load_perturbo_autofix(model_dir, mdata):
     path = Path(model_dir) / "model"
     max_tries, tried = 16, set()
 
-    def make_categorical(col):
-        mdata.mod["rna"].obs[col] = pd.Categorical([np.nan], categories=[])
+    def make_cat_like_object(col):
+        # object dtype; scvi will coerce to categorical using the saved registry
+        mdata.mod["rna"].obs[col] = pd.Series([None], dtype="object")
 
     def make_numeric(col):
         mdata.mod["rna"].obs[col] = 0.0
 
-    # pre-seed the common one you already hit
+    # pre-seed the one you already hit, but as object (NOT categorical)
     if "prep_batch" not in mdata.mod["rna"].obs:
-        make_categorical("prep_batch")
+        make_cat_like_object("prep_batch")
 
     for _ in range(max_tries):
         try:
             return perturbo.PERTURBO.load(path, adata=mdata)
         except KeyError as e:
             missing = e.args[0] if e.args else None
-            if not isinstance(missing, str):
-                raise
-            if missing in tried:
+            if not isinstance(missing, str) or missing in tried:
                 raise
             tried.add(missing)
 
-            key_lower = missing.lower()
-            if any(tok in key_lower for tok in ["batch", "prep", "donor", "celltype", "group", "cat"]):
-                make_categorical(missing)
+            k = missing.lower()
+            if any(tok in k for tok in ["batch", "prep", "donor", "celltype", "group", "cat"]):
+                make_cat_like_object(missing)
             else:
                 make_numeric(missing)
             continue

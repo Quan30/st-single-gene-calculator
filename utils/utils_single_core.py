@@ -98,74 +98,95 @@ class TestConfig:
 # -----------------
 
 def make_minimal_mdata(gene_names, *, layer=None, obs_cols=None, grna_var_names=None):
-    '''Create pseudo mudata s.t. loading the model do not have errors.'''
-    
+    """
+    Create a tiny MuData with 1 dummy cell so setup_mudata/load won't divide by zero.
+    RNA: one row of ones (libsize > 0). gRNA: one row (zeros ok).
+    Ensures matching obs indices and var index names across modalities.
+    """
+    import numpy as np
+    import pandas as pd
+    import scipy.sparse as sp
+    import anndata as ad
+    import mudata as md
+
     obs_cols = obs_cols or []
-    
-    # ---------- shared obs (exactly one cell) ----------
-    obs = pd.DataFrame(index=pd.Index(["dummy_cell"], name="cell"))
-    for c in obs_cols:
-        # keep dtypes categorical but non-empty
-        obs[c] = pd.Series(pd.Categorical([""]), index=obs.index)
 
+    # ------ shared obs (exactly one cell) ------
     obs = pd.DataFrame(index=pd.Index(["dummy_cell"], name="cell"))
-    for c in obs_cols:
-        obs[c] = pd.Categorical([""], categories=[""])
 
-    # RNA: one row of ones (libsize > 0), var index name must be same across mods
-    X_rna = sp.csr_matrix(np.ones((1, len(gene_names)), dtype=np.float32))
-    var_rna = pd.DataFrame(index=pd.Index(gene_names, name="features"))
+    # pre-seed known categorical keys your registry expects
+    if "prep_batch" not in obs.columns:
+        obs["prep_batch"] = pd.Categorical(["dummy"], categories=["dummy"])
+
+    # also add any user-provided obs categorical columns
+    for c in obs_cols:
+        if c not in obs.columns:
+            obs[c] = pd.Categorical(["dummy"], categories=["dummy"])
+
+    # ------ RNA modality: 1 row, non-zero counts ------
+    n_genes = len(gene_names)
+    X_rna = sp.csr_matrix(np.ones((1, n_genes), dtype=np.float32))  # libsize > 0
+    var_rna = pd.DataFrame(index=pd.Index(gene_names, name="features"))  # same name across mods
     rna = ad.AnnData(X=X_rna, obs=obs.copy(), var=var_rna)
     if layer is not None:
-        rna.layers[layer] = rna.X
-    # Prepopulate libsize/size_factor so no division-by-zero
-    rna.obs["umi_count"] = np.asarray(rna.X.sum(axis=1)).ravel()
+        rna.layers[layer] = rna.X  # e.g., "counts" if trained on a layer
+
+    # pre-populate obs metrics to avoid inference/zero-div
+    rna.obs["_libsize"] = np.asarray(rna.X.sum(axis=1)).ravel()  # > 0
     rna.obs["_size_factor"] = 0.0
 
-    # gRNA: one row, zeros are fine
+    # ------ gRNA modality: 1 row, zeros ok ------
     if not grna_var_names:
         grna_var_names = ["dummy_guide"]
-    grna_idx = pd.Index(grna_var_names, name="features")
+    grna_idx = pd.Index(grna_var_names, name="features")  # same var index name
     X_grna = sp.csr_matrix((1, len(grna_idx)), dtype=np.float32)
     grna = ad.AnnData(X=X_grna, obs=obs.copy(), var=pd.DataFrame(index=grna_idx))
 
+    # ------ assemble ------
     mdata = md.MuData({"rna": rna, "grna": grna})
+
+    # sanity checks (optional)
+    assert mdata.mod["rna"].n_obs == 1 and mdata.mod["grna"].n_obs == 1
+    assert (mdata.mod["rna"].obs_names == mdata.mod["grna"].obs_names).all()
+    assert mdata.mod["rna"].var.index.name == mdata.mod["grna"].var.index.name == "features"
+
     return mdata
 
 def load_perturbo_autofix(model_dir, mdata):
+    import pandas as pd
+    import perturbo
+    from pathlib import Path
 
     path = Path(model_dir) / "model"
-    # We also pass modalities explicitly via kwargs so registry mapping is clear,
-    # but scvi-tools will still use the saved ones. The important part is the columns we add.
-    max_tries = 12
-    tried = set()
+    max_tries, tried = 16, set()
+
+    def make_categorical(col):
+        mdata.mod["rna"].obs[col] = pd.Categorical(["dummy"], categories=["dummy"])
+
+    def make_numeric(col):
+        mdata.mod["rna"].obs[col] = 0.0
+
+    # pre-seed the common one you already hit
+    if "prep_batch" not in mdata.mod["rna"].obs:
+        make_categorical("prep_batch")
+
     for _ in range(max_tries):
         try:
             return perturbo.PERTURBO.load(path, adata=mdata)
         except KeyError as e:
-            missing = e.args[0]
+            missing = e.args[0] if e.args else None
             if not isinstance(missing, str):
                 raise
             if missing in tried:
                 raise
             tried.add(missing)
-            # Add as numeric by default
-            if missing not in mdata.mod["rna"].obs.columns:
-                mdata.mod["rna"].obs[missing] = 0.0
+
+            key_lower = missing.lower()
+            if any(tok in key_lower for tok in ["batch", "prep", "donor", "celltype", "group", "cat"]):
+                make_categorical(missing)
             else:
-                # if it exists, ensure it's a simple numeric; if later it needs categorical we'll convert
-                mdata.mod["rna"].obs[missing] = pd.to_numeric(mdata.mod["rna"].obs[missing], errors="coerce").fillna(0.0)
+                make_numeric(missing)
             continue
-        except ValueError as e:
-            msg = str(e)
-            # If message hints a *categorical* obs is required (e.g., batch key),
-            # convert the last-added column to categorical and retry.
-            if "categorical" in msg.lower() and tried:
-                col = list(tried)[-1]
-                mdata.mod["rna"].obs[col] = pd.Categorical(["dummy"], categories=["dummy"])
-                continue
-            raise
-    raise RuntimeError("Could not satisfy registry-required obs columns after several attempts.")
 
 def load_resources(cfg: SimulationConfig) -> Tuple[Any, md.MuData, Dict[str, Any]]:
     """Load trained PerTurbo model + Parameter extracted from real MuData (.npz) and build reference_stats."""
@@ -202,7 +223,7 @@ def load_resources(cfg: SimulationConfig) -> Tuple[Any, md.MuData, Dict[str, Any
         pass
     # optional empirical LFC samples
     try:
-        lfc_mat = ref["lfc_mat"]
+        lfc_mat = ref_real["lfc_mat"]
         if lfc_mat is not None:
             reference_stats["lfc_samples"] = np.asarray(lfc_mat).ravel()
     except Exception:

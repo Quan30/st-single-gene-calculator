@@ -100,25 +100,20 @@ class TestConfig:
 def make_minimal_mdata(gene_names, *, layer=None, obs_cols=None, grna_var_names=None):
     '''Create pseudo mudata s.t. loading the model do not have errors.'''
     
-    # --- RNA modality with zero cells ---
-    X = sp.csr_matrix((0, len(gene_names)))          # shape (n_cells=0, n_genes)
-    var = pd.DataFrame(index=pd.Index(gene_names, name="gene_name"))
+    # ---- RNA (0 cells) ----
+    X_rna = sp.csr_matrix((0, len(gene_names)))
+    var_rna = pd.DataFrame(index=pd.Index(gene_names, name="features"))  # <-- same name
     obs = pd.DataFrame(index=pd.Index([], name="cell"))
-
-    # If your training used specific obs covariates (e.g., "batch"), ensure the
-    # columns exist (empty) so registry matches.
-    obs_cols = obs_cols or []
     for c in obs_cols:
         obs[c] = pd.Series(dtype="category")
-
-    rna = ad.AnnData(X=X, obs=obs, var=var)
+    rna = ad.AnnData(X=X_rna, obs=obs.copy(), var=var_rna)
     if layer is not None:
-        rna.layers[layer] = rna.X  # create the layer key used at training
-        
-    # --- gRNA modality (0 cells, can be 0 or a few dummy guides) ---
-    grna_var = pd.Index(grna_var_names if grna_var_names is not None else [], name="guide_id")
-    X_grna = sp.csr_matrix((0, len(grna_var)))
-    grna = ad.AnnData(X=X_grna, obs=obs.copy(), var=pd.DataFrame(index=grna_var))
+        rna.layers[layer] = rna.X
+
+    # ---- gRNA (0 cells) ----
+    grna_idx = pd.Index(grna_var_names if grna_var_names is not None else [], name="features")  # <-- same name
+    X_grna = sp.csr_matrix((0, len(grna_idx)))
+    grna = ad.AnnData(X=X_grna, obs=obs.copy(), var=pd.DataFrame(index=grna_idx))
 
     # Assemble MuData with both modalities
     mdata = md.MuData({"rna": rna, "grna": grna})

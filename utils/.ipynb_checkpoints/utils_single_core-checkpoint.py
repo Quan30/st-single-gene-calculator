@@ -116,7 +116,7 @@ def make_minimal_mdata(gene_names, *, layer=None, obs_cols=None):
         rna.layers[layer] = rna.X  # create the layer key used at training
 
     # Minimal MuData with just RNA modality
-    mdata = mu.MuData({"rna": rna})
+    mdata = md.MuData({"rna": rna})
 
     # IMPORTANT: use setup_mudata (not setup_anndata)
     # Mirror your training-time arguments here if you used non-defaults

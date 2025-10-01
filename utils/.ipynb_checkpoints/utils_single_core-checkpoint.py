@@ -108,60 +108,64 @@ def make_minimal_mdata(gene_names, *, layer=None, obs_cols=None, grna_var_names=
         # keep dtypes categorical but non-empty
         obs[c] = pd.Series(pd.Categorical([""]), index=obs.index)
 
-    # ---------- RNA modality: 1 row, non-zero counts ----------
-    n_genes = len(gene_names)
-    X_rna = sp.csr_matrix(np.ones((1, n_genes), dtype=np.float32))  # all ones -> libsize > 0
+    obs = pd.DataFrame(index=pd.Index(["dummy_cell"], name="cell"))
+    for c in obs_cols:
+        obs[c] = pd.Categorical([""], categories=[""])
+
+    # RNA: one row of ones (libsize > 0), var index name must be same across mods
+    X_rna = sp.csr_matrix(np.ones((1, len(gene_names)), dtype=np.float32))
     var_rna = pd.DataFrame(index=pd.Index(gene_names, name="features"))
     rna = ad.AnnData(X=X_rna, obs=obs.copy(), var=var_rna)
     if layer is not None:
-        rna.layers[layer] = rna.X  # e.g., "counts" if you trained on that layer
-    # Pre-populate obs fields so setup_mudata won't try to infer (and divide by zero)
-    rna.obs["umi_count"] = np.asarray(rna.X.sum(axis=1)).ravel()  # > 0
-    rna.obs["_size_factor"] = 0.0  # any finite scalar is OK
+        rna.layers[layer] = rna.X
+    # Prepopulate libsize/size_factor so no division-by-zero
+    rna.obs["umi_count"] = np.asarray(rna.X.sum(axis=1)).ravel()
+    rna.obs["_size_factor"] = 0.0
 
-    # ---------- gRNA modality: 1 row, zeros OK ----------
+    # gRNA: one row, zeros are fine
     if not grna_var_names:
         grna_var_names = ["dummy_guide"]
     grna_idx = pd.Index(grna_var_names, name="features")
-    X_grna = sp.csr_matrix((1, len(grna_idx)), dtype=np.float32)  # all zeros
+    X_grna = sp.csr_matrix((1, len(grna_idx)), dtype=np.float32)
     grna = ad.AnnData(X=X_grna, obs=obs.copy(), var=pd.DataFrame(index=grna_idx))
 
-    # ---------- assemble MuData ----------
     mdata = md.MuData({"rna": rna, "grna": grna})
-
-    # Sanity checks BEFORE calling setup_mudata
-    assert mdata.mod["rna"].n_obs == 1 and mdata.mod["grna"].n_obs == 1, (
-        mdata.mod["rna"].n_obs, mdata.mod["grna"].n_obs
-    )
-    assert (mdata.mod["rna"].obs_names == mdata.mod["grna"].obs_names).all(), \
-        "RNA/GRNA obs indices must match"
-    assert mdata.mod["rna"].var.index.name == mdata.mod["grna"].var.index.name == "features"
-
-    # ---------- register with PerTurbo (MuData-first API) ----------
-    print("DEBUG pre-setup shapes:",
-      "rna", mdata.mod["rna"].X.shape,
-      "grna", mdata.mod["grna"].X.shape,
-      "obs equal?", (mdata.mod["rna"].obs_names == mdata.mod["grna"].obs_names).all())
-    perturbo.PERTURBO.setup_mudata(
-        mdata,
-        modalities={"rna_layer": "rna", "perturbation_layer": "grna"},  # critical
-        rna_layer=layer,            # None -> use .X ; or "counts" if trained on a layer
-        perturbation_layer=None,    # None -> use .X for gRNA
-        library_size_key="umi_count",
-        size_factor_key="_size_factor",
-        # mirror any training-time keys if used:
-        # batch_key="batch",
-        # continuous_covariates_keys=[...],
-        # gene_by_element_key=...,
-        # guide_by_element_key=...,
-        # rna_element_uns_key=...,
-        # guide_element_uns_key=...,
-    )
-
-    # Sanity AFTER setup: should still be 1 row
-    assert mdata.mod["rna"].n_obs == 1, "RNA lost rows during setup_mudata"
     return mdata
 
+def load_perturbo_autofix(model_dir, mdata):
+
+    path = Path(model_dir) / "model"
+    # We also pass modalities explicitly via kwargs so registry mapping is clear,
+    # but scvi-tools will still use the saved ones. The important part is the columns we add.
+    max_tries = 12
+    tried = set()
+    for _ in range(max_tries):
+        try:
+            return perturbo.PERTURBO.load(path, adata=mdata)
+        except KeyError as e:
+            missing = e.args[0]
+            if not isinstance(missing, str):
+                raise
+            if missing in tried:
+                raise
+            tried.add(missing)
+            # Add as numeric by default
+            if missing not in mdata.mod["rna"].obs.columns:
+                mdata.mod["rna"].obs[missing] = 0.0
+            else:
+                # if it exists, ensure it's a simple numeric; if later it needs categorical we'll convert
+                mdata.mod["rna"].obs[missing] = pd.to_numeric(mdata.mod["rna"].obs[missing], errors="coerce").fillna(0.0)
+            continue
+        except ValueError as e:
+            msg = str(e)
+            # If message hints a *categorical* obs is required (e.g., batch key),
+            # convert the last-added column to categorical and retry.
+            if "categorical" in msg.lower() and tried:
+                col = list(tried)[-1]
+                mdata.mod["rna"].obs[col] = pd.Categorical(["dummy"], categories=["dummy"])
+                continue
+            raise
+    raise RuntimeError("Could not satisfy registry-required obs columns after several attempts.")
 
 def load_resources(cfg: SimulationConfig) -> Tuple[Any, md.MuData, Dict[str, Any]]:
     """Load trained PerTurbo model + Parameter extracted from real MuData (.npz) and build reference_stats."""
@@ -181,7 +185,8 @@ def load_resources(cfg: SimulationConfig) -> Tuple[Any, md.MuData, Dict[str, Any
     mdata_min = make_minimal_mdata(gene_names, layer=None, obs_cols=[], grna_var_names=None)
     
     model_dir = Path(cfg.model_dir)
-    model = perturbo.PERTURBO.load(model_dir / "model", adata=mdata_min)
+    model = load_perturbo_autofix(model_dir, mdata_min)
+    #model = perturbo.PERTURBO.load(model_dir / "model", adata=mdata_min)
 
     reference_stats: Dict[str, Any] = {}
     # per-gene means

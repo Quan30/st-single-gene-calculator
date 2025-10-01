@@ -124,7 +124,7 @@ def load_resources(cfg: SimulationConfig) -> Tuple[Any, md.MuData, Dict[str, Any
             f"Could not find file. Checked: {candidate}\n"
             "Hint: pass full file path or a directory that contains the '.npz' file."
         )
-    ref_real = np.load(str(candidate, allow_pickle=True))
+    ref_real = np.load(str(candidate), allow_pickle=True)
     
     gene_names = ref_real["gene_names"]
     adata_min = make_minimal_adata(gene_names)

@@ -100,40 +100,54 @@ class TestConfig:
 def make_minimal_mdata(gene_names, *, layer=None, obs_cols=None, grna_var_names=None):
     '''Create pseudo mudata s.t. loading the model do not have errors.'''
     
-    # ---- RNA (0 cells) ----
-    X_rna = sp.csr_matrix((0, len(gene_names)))
-    var_rna = pd.DataFrame(index=pd.Index(gene_names, name="features"))  # same name across mods
-    obs = pd.DataFrame(index=pd.Index([], name="cell"))
+    obs_cols = obs_cols or []
+    
+    # -------- RNA modality (1 dummy cell) --------
+    n_genes = len(gene_names)
+    # Use small non-zero counts so library size > 0 (all ones is simplest)
+    X_rna = sp.csr_matrix(np.ones((1, n_genes), dtype=np.float32))
+    var_rna = pd.DataFrame(index=pd.Index(gene_names, name="features"))
+    obs = pd.DataFrame(index=pd.Index(["dummy_cell"], name="cell"))
     for c in obs_cols:
-        obs[c] = pd.Series(dtype="category")
+        obs[c] = pd.Series([""], index=obs.index, dtype="category")
+
     rna = ad.AnnData(X=X_rna, obs=obs.copy(), var=var_rna)
     if layer is not None:
-        rna.layers[layer] = rna.X
+        rna.layers[layer] = rna.X  # e.g., "counts" if you trained on that layer
 
-    # ---- gRNA (0 cells) ----
-    # ensure at least one dummy guide if none provided (some stacks dislike 0 vars)
+    # Precompute required obs fields so setup_mudata won't try to infer them
+    obs["_libsize"] = np.asarray(rna.X.sum(axis=1)).ravel()  # > 0
+    # any finite value is OK; centered log-CPM is what code would compute — use 0.0
+    obs["_size_factor"] = 0.0
+    rna.obs = obs.copy()
+
+    # -------- gRNA modality (1 dummy cell, 0/≥1 guides) --------
     if not grna_var_names:
         grna_var_names = ["dummy_guide"]
-    grna_idx = pd.Index(grna_var_names, name="features")               # same name
-    X_grna = sp.csr_matrix((0, len(grna_idx)))
+    grna_idx = pd.Index(grna_var_names, name="features")
+    X_grna = sp.csr_matrix((1, len(grna_idx)), dtype=np.float32)  # all zeros OK
     grna = ad.AnnData(X=X_grna, obs=obs.copy(), var=pd.DataFrame(index=grna_idx))
 
-
-    # Assemble MuData with both modalities
+    # -------- Assemble MuData --------
     mdata = md.MuData({"rna": rna, "grna": grna})
 
-    # IMPORTANT: use setup_mudata (not setup_anndata)
-    # Mirror your training-time arguments here if you used non-defaults
+    # -------- Register with PerTurbo (MuData-first API) --------
     perturbo.PERTURBO.setup_mudata(
         mdata,
-        # tell PerTurbo which MuData modalities hold RNA / gRNA
         modalities={"rna_layer": "rna", "perturbation_layer": "grna"},
-        # optional layer names inside each AnnData (None -> use .X)
-        rna_layer=layer,             # e.g., "counts" if you trained on a counts layer; else None
-        perturbation_layer=None,     # we put guides in .X; keep None
-        # if you had batch/covariates during training, mirror them here:
+        # Inside each AnnData, which matrix to use:
+        rna_layer=layer,            # None → use .X, or "counts" if you trained on that layer
+        perturbation_layer=None,    # None → use .X for gRNA
+        # Provide obs keys so it won't try to infer (and divide by zero)
+        library_size_key="_libsize",
+        size_factor_key="_size_factor",
+        # Mirror training-time kwargs here if you used them:
         # batch_key="batch",
-        # continuous_covariates_keys=["size_factors", ...],
+        # continuous_covariates_keys=[...],
+        # gene_by_element_key=...,
+        # guide_by_element_key=...,
+        # rna_element_uns_key=...,
+        # guide_element_uns_key=...,
     )
     return mdata
 

@@ -97,7 +97,7 @@ class TestConfig:
 # Load resources
 # -----------------
 
-def make_minimal_adata(gene_names):
+def make_minimal_mdata(gene_names, *, layer=None, obs_cols=None):
     '''Create pseudo mudata s.t. loading the model do not have errors.'''
     
     # --- RNA modality with zero cells ---
@@ -145,7 +145,7 @@ def load_resources(cfg: SimulationConfig) -> Tuple[Any, md.MuData, Dict[str, Any
     ref_real = np.load(str(candidate), allow_pickle=True)
     
     gene_names = ref_real["gene_name"]
-    mdata_min = make_minimal_adata(gene_names, layer=None, obs_cols=[])
+    mdata_min = make_minimal_mdata(gene_names, layer=None, obs_cols=[])
     
     model_dir = Path(cfg.model_dir)
     model = perturbo.PERTURBO.load(model_dir / "model", mdata=mdata_min)

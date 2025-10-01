@@ -103,12 +103,6 @@ def make_minimal_mdata(gene_names, *, layer=None, obs_cols=None, grna_var_names=
     RNA: one row of ones (libsize > 0). gRNA: one row (zeros ok).
     Ensures matching obs indices and var index names across modalities.
     """
-    import numpy as np
-    import pandas as pd
-    import scipy.sparse as sp
-    import anndata as ad
-    import mudata as md
-
     obs_cols = obs_cols or []
 
     # ------ shared obs (exactly one cell) ------
@@ -116,12 +110,12 @@ def make_minimal_mdata(gene_names, *, layer=None, obs_cols=None, grna_var_names=
 
     # pre-seed known categorical keys your registry expects
     if "prep_batch" not in obs.columns:
-        obs["prep_batch"] = pd.Categorical(["dummy"], categories=["dummy"])
+        obs["prep_batch"] = pd.Categorical([np.nan], categories=[])
 
     # also add any user-provided obs categorical columns
     for c in obs_cols:
         if c not in obs.columns:
-            obs[c] = pd.Categorical(["dummy"], categories=["dummy"])
+            obs[c] = pd.Categorical([np.nan], categories=[])
 
     # ------ RNA modality: 1 row, non-zero counts ------
     n_genes = len(gene_names)
@@ -132,7 +126,7 @@ def make_minimal_mdata(gene_names, *, layer=None, obs_cols=None, grna_var_names=
         rna.layers[layer] = rna.X  # e.g., "counts" if trained on a layer
 
     # pre-populate obs metrics to avoid inference/zero-div
-    rna.obs["_libsize"] = np.asarray(rna.X.sum(axis=1)).ravel()  # > 0
+    rna.obs["umi_count"] = np.asarray(rna.X.sum(axis=1)).ravel()  # > 0
     rna.obs["_size_factor"] = 0.0
 
     # ------ gRNA modality: 1 row, zeros ok ------
@@ -153,15 +147,12 @@ def make_minimal_mdata(gene_names, *, layer=None, obs_cols=None, grna_var_names=
     return mdata
 
 def load_perturbo_autofix(model_dir, mdata):
-    import pandas as pd
-    import perturbo
-    from pathlib import Path
 
     path = Path(model_dir) / "model"
     max_tries, tried = 16, set()
 
     def make_categorical(col):
-        mdata.mod["rna"].obs[col] = pd.Categorical(["dummy"], categories=["dummy"])
+        mdata.mod["rna"].obs[col] = pd.Categorical([np.nan], categories=[])
 
     def make_numeric(col):
         mdata.mod["rna"].obs[col] = 0.0

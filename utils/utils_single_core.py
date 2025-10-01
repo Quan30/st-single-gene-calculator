@@ -97,6 +97,121 @@ class TestConfig:
 # Load resources
 # -----------------
 
+def _read_saved_registry_categories(model_dir: Path) -> dict:
+    """
+    Try to read categorical obs keys -> allowed categories from the saved model folder.
+    Supports scvi-tools 1.x file layouts. Returns {obs_key: [cat1, cat2, ...]}.
+    """
+    import json, pickle
+    from pathlib import Path
+
+    folder = Path(model_dir) / "model"
+    out: dict = {}
+
+    # --- Option A: load AnnDataManager pickle (most reliable) ---
+    pkl = folder / "adata_manager.pkl"
+    if pkl.exists():
+        try:
+            with open(pkl, "rb") as f:
+                manager = pickle.load(f)
+            # manager.list_state_registries() → names like "batch", "cat_covs", etc. (depends on scvi-tools version)
+            for key in ("batch",):  # primary batch key
+                try:
+                    reg = manager.get_state_registry(key)
+                    # common attribute names across versions:
+                    for attr in ("categories", "cat_names", "mapping", "categorical_mapping"):
+                        cats = getattr(reg, attr, None)
+                        if cats is not None:
+                            # cats may be dict or list
+                            if isinstance(cats, dict):
+                                # e.g., {"prep_batch": ["A","B",...]} or {"mapping": [...]}
+                                # flatten any inner lists
+                                for k, v in cats.items():
+                                    if isinstance(v, (list, tuple)):
+                                        out[k] = list(v)
+                            elif isinstance(cats, (list, tuple)):
+                                # when the registry is directly about the batch column
+                                # we need the actual obs key name; fall through to JSON below to learn it
+                                out.setdefault("__BATCH__CATS__", list(cats))
+                            break
+                except Exception:
+                    pass
+        except Exception:
+            pass  # fall through to JSON readers
+
+    # --- Option B: JSON blobs saved by scvi-tools ---
+    # These files vary by version; scan common names:
+    for name in ("scvi_attrs.json", "attr_dict.json", "setup_args.json"):
+        fp = folder / name
+        if not fp.exists():
+            continue
+        try:
+            with open(fp, "r") as f:
+                data = json.load(f)
+        except Exception:
+            continue
+
+        # find batch key
+        batch_key = None
+        # common locations for setup args:
+        for k in ("setup_kwargs", "setup_args", "data", "data_registry", "attr_dict"):
+            val = data.get(k)
+            if isinstance(val, dict) and "batch_key" in val:
+                batch_key = val.get("batch_key")
+                break
+        if batch_key is None:
+            # sometimes directly present
+            batch_key = data.get("batch_key")
+
+        # find categorical mappings
+        # possible keys in json: "categorical_mappings", "extra_categoricals", etc.
+        cat_maps = None
+        for k in ("categorical_mappings", "cat_mappings", "categoricals", "obs_categoricals"):
+            val = data.get(k)
+            if isinstance(val, dict):
+                cat_maps = val
+                break
+
+        if batch_key and cat_maps:
+            if isinstance(cat_maps.get(batch_key), dict):
+                # could be {"mapping": ["A","B",...], ...}
+                mapping = cat_maps[batch_key].get("mapping") or cat_maps[batch_key].get("categories")
+                if isinstance(mapping, list):
+                    out[batch_key] = list(mapping)
+            elif isinstance(cat_maps.get(batch_key), list):
+                out[batch_key] = list(cat_maps[batch_key])
+
+        # if we only found bare category list but not the obs key, keep it temporarily
+        if "__BATCH__CATS__" in out and batch_key and batch_key not in out:
+            out[batch_key] = out.pop("__BATCH__CATS__")
+
+    return out
+
+
+def _preseed_registry_categories_into_mdata(mdata, cats_by_key: dict):
+    """
+    For each obs categorical key in cats_by_key, ensure the RNA modality has that column with a value
+    from the saved categories. This avoids 'extend_categories' errors during registry transfer.
+    """
+    import pandas as pd
+
+    if not cats_by_key:
+        return
+
+    rna_obs = mdata.mod["rna"].obs
+    for obs_key, cats in cats_by_key.items():
+        if not isinstance(cats, (list, tuple)) or len(cats) == 0:
+            continue
+        seed_val = cats[0]  # choose the first category deterministically
+        if obs_key not in rna_obs.columns:
+            # important: create as 'object' with a valid label, not Categorical
+            rna_obs[obs_key] = pd.Series([seed_val], dtype="object")
+        else:
+            # if column exists, coerce to object and set a valid value
+            rna_obs[obs_key] = rna_obs[obs_key].astype("object")
+            rna_obs.iloc[0, rna_obs.columns.get_loc(obs_key)] = seed_val
+
+
 def make_minimal_mdata(gene_names, *, layer=None, obs_cols=None, grna_var_names=None):
     """
     Create a tiny MuData with 1 dummy cell so setup_mudata/load won't divide by zero.
@@ -192,6 +307,9 @@ def load_resources(cfg: SimulationConfig) -> Tuple[Any, md.MuData, Dict[str, Any
     gene_names = ref_real["gene_name"]
     mdata_min = make_minimal_mdata(gene_names, layer=None, obs_cols=[], grna_var_names=None)
     
+    cats_by_key = _read_saved_registry_categories(model_dir)
+    _preseed_registry_categories_into_mdata(mdata_min, cats_by_key)
+
     model_dir = Path(cfg.model_dir)
     model = load_perturbo_autofix(model_dir, mdata_min)
     #model = perturbo.PERTURBO.load(model_dir / "model", adata=mdata_min)

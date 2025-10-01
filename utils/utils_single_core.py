@@ -307,10 +307,9 @@ def load_resources(cfg: SimulationConfig) -> Tuple[Any, md.MuData, Dict[str, Any
     gene_names = ref_real["gene_name"]
     mdata_min = make_minimal_mdata(gene_names, layer=None, obs_cols=[], grna_var_names=None)
     
+    model_dir = Path(cfg.model_dir)
     cats_by_key = _read_saved_registry_categories(model_dir)
     _preseed_registry_categories_into_mdata(mdata_min, cats_by_key)
-
-    model_dir = Path(cfg.model_dir)
     model = load_perturbo_autofix(model_dir, mdata_min)
     #model = perturbo.PERTURBO.load(model_dir / "model", adata=mdata_min)
 

@@ -97,7 +97,7 @@ class TestConfig:
 # Load resources
 # -----------------
 
-def make_minimal_mdata(gene_names, *, layer=None, obs_cols=None):
+def make_minimal_mdata(gene_names, *, layer=None, obs_cols=None, grna_var_names=None):
     '''Create pseudo mudata s.t. loading the model do not have errors.'''
     
     # --- RNA modality with zero cells ---
@@ -114,15 +114,21 @@ def make_minimal_mdata(gene_names, *, layer=None, obs_cols=None):
     rna = ad.AnnData(X=X, obs=obs, var=var)
     if layer is not None:
         rna.layers[layer] = rna.X  # create the layer key used at training
+        
+    # --- gRNA modality (0 cells, can be 0 or a few dummy guides) ---
+    grna_var = pd.Index(grna_var_names if grna_var_names is not None else [], name="guide_id")
+    X_grna = sp.csr_matrix((0, len(grna_var)))
+    grna = ad.AnnData(X=X_grna, obs=obs.copy(), var=pd.DataFrame(index=grna_var))
 
-    # Minimal MuData with just RNA modality
-    mdata = md.MuData({"rna": rna})
+    # Assemble MuData with both modalities
+    mdata = md.MuData({"rna": rna, "grna": grna})
 
     # IMPORTANT: use setup_mudata (not setup_anndata)
     # Mirror your training-time arguments here if you used non-defaults
     perturbo.PERTURBO.setup_mudata(
         mdata,
         rna_mod="rna",
+        grna_mod="grna",
         layer=layer,          # e.g., "counts" if you trained on a counts layer
         # batch_key="batch",  # uncomment & set if used
         # other covariate keys as needed...
@@ -145,7 +151,7 @@ def load_resources(cfg: SimulationConfig) -> Tuple[Any, md.MuData, Dict[str, Any
     ref_real = np.load(str(candidate), allow_pickle=True)
     
     gene_names = ref_real["gene_name"]
-    mdata_min = make_minimal_mdata(gene_names, layer=None, obs_cols=[])
+    mdata_min = make_minimal_mdata(gene_names, layer=None, obs_cols=[], grna_var_names=None)
     
     model_dir = Path(cfg.model_dir)
     model = perturbo.PERTURBO.load(model_dir / "model", mdata=mdata_min)

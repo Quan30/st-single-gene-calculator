@@ -7,7 +7,18 @@ import zipfile
 import streamlit as st
 import pandas as pd
 
+os.environ.setdefault("OMP_NUM_THREADS", "1")
 import torch, inspect
+torch.set_num_threads(1)
+
+from utils import utils_single_core as _core  # so we can patch its function
+
+@st.cache_resource(show_spinner=False)
+def _cached_load_resources(cfg: SimulationConfig):
+    return _core.load_resources(cfg)
+
+# Monkey-patch the utils module so power_* uses the cached loader
+_core.load_resources = _cached_load_resources
 
 # Your project utilities
 from utils.utils_single_core import SimulationConfig, TestConfig  # configs  ← :contentReference[oaicite:3]{index=3}
@@ -148,10 +159,23 @@ with left:
     mode = st.selectbox("X-axis", ["Cells per element", "LFC", "Guides per element", "MOI", "Gene mean (approx)"])
 
     fixed_cells = st.number_input("Fixed cells/element (for LFC/Guides/MOI/GeneMean)", 10, 1_000_000, 200, step=10)
-    min_val = st.number_input("Min", value=0.2)
-    max_val = st.number_input("Max", value=1.0)
-    n_bins = st.number_input("Bins (or points)", 2, 200, 5, step=1)
-    step = st.number_input("Step (Guides mode only)", 1, 100, 1, step=1)
+
+    if mode == "Cells per element":
+        min_val = st.number_input("Min cells/element", 1, 1_000_000, 200, step=10)
+        max_val = st.number_input("Max cells/element", 1, 1_000_000, 2000, step=10)
+        n_bins  = st.number_input("Bins", 2, 200, 5, step=1)
+        step    = 1  # unused here
+    elif mode == "Guides per element":
+        min_val = st.number_input("Min guides/element", 1, 128, 1, step=1)
+        max_val = st.number_input("Max guides/element", 1, 128, 8, step=1)
+        n_bins  = 0  # unused
+        step    = st.number_input("Step (Guides mode)", 1, 100, 1, step=1)
+    else:
+        # LFC / MOI / Gene mean use floats
+        min_val = st.number_input("Min", value=0.2)
+        max_val = st.number_input("Max", value=1.0)
+        n_bins  = st.number_input("Points", 2, 200, 5, step=1)
+        step    = 1  # unused
 
     col_run, col_stop = st.columns(2)
     with col_run:
@@ -211,16 +235,16 @@ if run_btn:
                 df = power_vs_cells(int(min_val), int(max_val), int(n_bins), cfg, tcfg, abort_flag=abort)
                 x_col, x_label, title = "NCellsPerElement", "Number of Cells per Element", "Power vs Number of Cells per Element"
             elif mode == "LFC":
-                df = power_vs_lfc(float(min_val), float(max_val), int(n_bins), fixed_cells, cfg, tcfg, abort_flag=abort)
+                df = power_vs_lfc(float(min_val), float(max_val), int(n_bins), int(fixed_cells), cfg, tcfg, abort_flag=abort)
                 x_col, x_label, title = "LFC", "LFC", "Power vs LFC"
             elif mode == "Guides per element":
-                df = power_vs_nguides(int(min_val), int(max_val), int(step), fixed_cells, cfg, tcfg, abort_flag=abort)
+                df = power_vs_nguides(int(min_val), int(max_val), int(step), int(fixed_cells), cfg, tcfg, abort_flag=abort)
                 x_col, x_label, title = "NGuidesPerElement", "Number of Guides per Element", "Power vs #Guides/Element"
             elif mode == "MOI":
-                df = power_vs_moi(float(min_val), float(max_val), int(n_bins), fixed_cells, cfg, tcfg, abort_flag=abort)
+                df = power_vs_moi(float(min_val), float(max_val), int(n_bins), int(fixed_cells), cfg, tcfg, abort_flag=abort)
                 x_col, x_label, title = "MOI", "MOI", "Power vs MOI"
             else:  # Gene mean (approx)
-                df = power_vs_gene_mean(float(min_val), float(max_val), int(n_bins), fixed_cells, cfg, tcfg, abort_flag=abort)
+                df = power_vs_gene_mean(float(min_val), float(max_val), int(n_bins), int(fixed_cells), cfg, tcfg, abort_flag=abort)
                 x_col, x_label, title = "GeneMeanApprox", "Gene mean (approx)", "Power vs Gene Mean (approx)"
             status.update(label="Finished.", state="complete", expanded=False)
     except Exception as e:

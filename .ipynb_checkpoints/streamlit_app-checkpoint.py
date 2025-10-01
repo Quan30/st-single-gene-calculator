@@ -7,6 +7,10 @@ import zipfile
 import streamlit as st
 import pandas as pd
 
+import torch, inspect
+st.write("Torch version:", torch.__version__)
+st.write("torch.load signature:", inspect.signature(torch.load))
+
 # Your project utilities
 from utils.utils_single_core import SimulationConfig, TestConfig  # configs  ← :contentReference[oaicite:3]{index=3}
 from utils.utils_single_sweeps import (  # sweep runners               ← :contentReference[oaicite:4]{index=4}
@@ -90,8 +94,8 @@ with st.expander("ℹ️ How this works", expanded=False):
 # Sidebar: Simulation & Test cfg
 # ------------------------------
 st.sidebar.header("⚙️ Simulation")
-model_dir = st.sidebar.text_input("Model directory", value="../save_model")
-real_path = st.sidebar.text_input("Parameters from Real data (.npz)", value="../save_model/model/reference_stats_compact.npz")
+model_dir = st.sidebar.text_input("Model directory", value="save_model")
+real_path = st.sidebar.text_input("Parameters from Real data (.npz)", value="save_model/model/reference_stats_compact.npz")
 accelerator = st.sidebar.selectbox("Accelerator (for simulation)", ["cpu", "gpu"], index=0)
 
 st.sidebar.divider()

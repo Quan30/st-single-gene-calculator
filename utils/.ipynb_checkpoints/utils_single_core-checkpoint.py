@@ -98,18 +98,36 @@ class TestConfig:
 # -----------------
 
 def make_minimal_adata(gene_names):
-    '''Create pseudo anndata s.t. loading the model do not have errors.'''
-
-    # zero cells, same variables (genes)
-    X = sp.csr_matrix((0, len(gene_names)))  # shape (0, n_genes)
-    var = pd.DataFrame(index=pd.Index(gene_names, name="gene_name"))  # name optional
+    '''Create pseudo mudata s.t. loading the model do not have errors.'''
+    
+    # --- RNA modality with zero cells ---
+    X = sp.csr_matrix((0, len(gene_names)))          # shape (n_cells=0, n_genes)
+    var = pd.DataFrame(index=pd.Index(gene_names, name="gene_name"))
     obs = pd.DataFrame(index=pd.Index([], name="cell"))
 
-    adata = ad.AnnData(X=X, obs=obs, var=var)
+    # If your training used specific obs covariates (e.g., "batch"), ensure the
+    # columns exist (empty) so registry matches.
+    obs_cols = obs_cols or []
+    for c in obs_cols:
+        obs[c] = pd.Series(dtype="category")
 
-    # Minimal PerTurbo/scvi setup; if your training used custom keys,
-    perturbo.PERTURBO.setup_anndata(adata)  # defaults are fine if you used defaults
-    return adata
+    rna = ad.AnnData(X=X, obs=obs, var=var)
+    if layer is not None:
+        rna.layers[layer] = rna.X  # create the layer key used at training
+
+    # Minimal MuData with just RNA modality
+    mdata = mu.MuData({"rna": rna})
+
+    # IMPORTANT: use setup_mudata (not setup_anndata)
+    # Mirror your training-time arguments here if you used non-defaults
+    perturbo.PERTURBO.setup_mudata(
+        mdata,
+        rna_mod="rna",
+        layer=layer,          # e.g., "counts" if you trained on a counts layer
+        # batch_key="batch",  # uncomment & set if used
+        # other covariate keys as needed...
+    )
+    return mdata
 
 
 def load_resources(cfg: SimulationConfig) -> Tuple[Any, md.MuData, Dict[str, Any]]:
@@ -127,10 +145,10 @@ def load_resources(cfg: SimulationConfig) -> Tuple[Any, md.MuData, Dict[str, Any
     ref_real = np.load(str(candidate), allow_pickle=True)
     
     gene_names = ref_real["gene_name"]
-    adata_min = make_minimal_adata(gene_names)
+    mdata_min = make_minimal_adata(gene_names, layer=None, obs_cols=[])
     
     model_dir = Path(cfg.model_dir)
-    model = perturbo.PERTURBO.load(model_dir / "model", adata=adata_min)
+    model = perturbo.PERTURBO.load(model_dir / "model", mdata=mdata_min)
 
     reference_stats: Dict[str, Any] = {}
     # per-gene means

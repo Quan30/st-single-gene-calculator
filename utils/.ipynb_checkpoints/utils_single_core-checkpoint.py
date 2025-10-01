@@ -126,11 +126,14 @@ def make_minimal_mdata(gene_names, *, layer=None, obs_cols=None, grna_var_names=
     # Mirror your training-time arguments here if you used non-defaults
     perturbo.PERTURBO.setup_mudata(
         mdata,
-        rna_mod="rna",
-        grna_mod="grna",
-        layer=layer,          # e.g., "counts" if you trained on a counts layer
-        # batch_key="batch",  # uncomment & set if used
-        # other covariate keys as needed...
+        # tell PerTurbo which MuData modalities hold RNA / gRNA
+        modalities={"rna_layer": "rna", "perturbation_layer": "grna"},
+        # optional layer names inside each AnnData (None -> use .X)
+        rna_layer=layer,             # e.g., "counts" if you trained on a counts layer; else None
+        perturbation_layer=None,     # we put guides in .X; keep None
+        # if you had batch/covariates during training, mirror them here:
+        # batch_key="batch",
+        # continuous_covariates_keys=["size_factors", ...],
     )
     return mdata
 

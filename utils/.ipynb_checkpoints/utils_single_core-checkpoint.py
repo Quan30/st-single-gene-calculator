@@ -181,7 +181,7 @@ def load_resources(cfg: SimulationConfig) -> Tuple[Any, md.MuData, Dict[str, Any
     mdata_min = make_minimal_mdata(gene_names, layer=None, obs_cols=[], grna_var_names=None)
     
     model_dir = Path(cfg.model_dir)
-    model = perturbo.PERTURBO.load(model_dir / "model", mdata=mdata_min)
+    model = perturbo.PERTURBO.load(model_dir / "model", adata=mdata_min)
 
     reference_stats: Dict[str, Any] = {}
     # per-gene means

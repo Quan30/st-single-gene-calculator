@@ -97,76 +97,6 @@ class TestConfig:
 # Load resources
 # -----------------
 
-def make_minimal_mdata(gene_names, *, layer=None, obs_cols=None, grna_var_names=None):
-    '''Create pseudo mudata s.t. loading the model do not have errors.'''
-    
-    obs_cols = obs_cols or []
-    
-    # ---------- shared obs (exactly one cell) ----------
-    obs = pd.DataFrame(index=pd.Index(["dummy_cell"], name="cell"))
-    for c in obs_cols:
-        # keep dtypes categorical but non-empty
-        obs[c] = pd.Series(pd.Categorical([""]), index=obs.index)
-
-    obs = pd.DataFrame(index=pd.Index(["dummy_cell"], name="cell"))
-    for c in obs_cols:
-        obs[c] = pd.Categorical([""], categories=[""])
-
-    # RNA: one row of ones (libsize > 0), var index name must be same across mods
-    X_rna = sp.csr_matrix(np.ones((1, len(gene_names)), dtype=np.float32))
-    var_rna = pd.DataFrame(index=pd.Index(gene_names, name="features"))
-    rna = ad.AnnData(X=X_rna, obs=obs.copy(), var=var_rna)
-    if layer is not None:
-        rna.layers[layer] = rna.X
-    # Prepopulate libsize/size_factor so no division-by-zero
-    rna.obs["umi_count"] = np.asarray(rna.X.sum(axis=1)).ravel()
-    rna.obs["_size_factor"] = 0.0
-
-    # gRNA: one row, zeros are fine
-    if not grna_var_names:
-        grna_var_names = ["dummy_guide"]
-    grna_idx = pd.Index(grna_var_names, name="features")
-    X_grna = sp.csr_matrix((1, len(grna_idx)), dtype=np.float32)
-    grna = ad.AnnData(X=X_grna, obs=obs.copy(), var=pd.DataFrame(index=grna_idx))
-
-    mdata = md.MuData({"rna": rna, "grna": grna})
-    return mdata
-
-def load_perturbo_autofix(model_dir, mdata):
-
-    path = Path(model_dir) / "model"
-    # We also pass modalities explicitly via kwargs so registry mapping is clear,
-    # but scvi-tools will still use the saved ones. The important part is the columns we add.
-    max_tries = 12
-    tried = set()
-    for _ in range(max_tries):
-        try:
-            return perturbo.PERTURBO.load(path, adata=mdata)
-        except KeyError as e:
-            missing = e.args[0]
-            if not isinstance(missing, str):
-                raise
-            if missing in tried:
-                raise
-            tried.add(missing)
-            # Add as numeric by default
-            if missing not in mdata.mod["rna"].obs.columns:
-                mdata.mod["rna"].obs[missing] = 0.0
-            else:
-                # if it exists, ensure it's a simple numeric; if later it needs categorical we'll convert
-                mdata.mod["rna"].obs[missing] = pd.to_numeric(mdata.mod["rna"].obs[missing], errors="coerce").fillna(0.0)
-            continue
-        except ValueError as e:
-            msg = str(e)
-            # If message hints a *categorical* obs is required (e.g., batch key),
-            # convert the last-added column to categorical and retry.
-            if "categorical" in msg.lower() and tried:
-                col = list(tried)[-1]
-                mdata.mod["rna"].obs[col] = pd.Categorical(["dummy"], categories=["dummy"])
-                continue
-            raise
-    raise RuntimeError("Could not satisfy registry-required obs columns after several attempts.")
-
 def load_resources(cfg: SimulationConfig) -> Tuple[Any, md.MuData, Dict[str, Any]]:
     """Load trained PerTurbo model + Parameter extracted from real MuData (.npz) and build reference_stats."""
     print("Start Loading Model and MuData_real.")
@@ -181,12 +111,8 @@ def load_resources(cfg: SimulationConfig) -> Tuple[Any, md.MuData, Dict[str, Any
         )
     ref_real = np.load(str(candidate), allow_pickle=True)
     
-    gene_names = ref_real["gene_name"]
-    mdata_min = make_minimal_mdata(gene_names, layer=None, obs_cols=[], grna_var_names=None)
-    
     model_dir = Path(cfg.model_dir)
-    model = load_perturbo_autofix(model_dir, mdata_min)
-    #model = perturbo.PERTURBO.load(model_dir / "model", adata=mdata_min)
+    model = perturbo.PERTURBO.load(model_dir / "model")
 
     reference_stats: Dict[str, Any] = {}
     # per-gene means
@@ -202,7 +128,7 @@ def load_resources(cfg: SimulationConfig) -> Tuple[Any, md.MuData, Dict[str, Any
         pass
     # optional empirical LFC samples
     try:
-        lfc_mat = ref["lfc_mat"]
+        lfc_mat = ref_real["lfc_mat"]
         if lfc_mat is not None:
             reference_stats["lfc_samples"] = np.asarray(lfc_mat).ravel()
     except Exception:

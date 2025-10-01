@@ -166,7 +166,7 @@ with left:
 # Construct configs
 cfg = SimulationConfig(
     model_dir=model_dir,
-    real_data_path=real_path,
+    real_data_ref_path=real_path,
     accelerator=accelerator,
     gene_name=gene_name,
     n_genes=int(n_genes),

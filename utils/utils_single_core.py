@@ -50,7 +50,7 @@ warnings.filterwarnings("ignore", category=UserWarning)
 class SimulationConfig:
     # data & model
     model_dir: str              # path containing saved PerTurbo model (subdir "model")
-    real_data_path: str         # path to mdata.h5mu (file or directory containing it)
+    real_data_ref_path: str         # path to .npz (file or directory containing it)
     accelerator: str = "cpu"    # 'cpu' or 'gpu'
 
     # experiment setup
@@ -95,27 +95,27 @@ class TestConfig:
 # -----------------
 
 def load_resources(cfg: SimulationConfig) -> Tuple[Any, md.MuData, Dict[str, Any]]:
-    """Load trained PerTurbo model + real MuData (mdata.h5mu) and build reference_stats."""
+    """Load trained PerTurbo model + Parameter extracted from real MuData (.npz) and build reference_stats."""
     print("Start Loading Model and MuData_real.")
     pyro.clear_param_store()
 
     model_dir = Path(cfg.model_dir)
     model = perturbo.PERTURBO.load(model_dir / "model")
 
-    real_path = Path(cfg.real_data_path)
-    candidate = real_path / "mdata.h5mu" if real_path.is_dir() else real_path
+    real_path = Path(cfg.real_data_ref_path)
+    candidate = real_path / "reference_stats_compact.npz" if real_path.is_dir() else real_path
     if not candidate.exists() or not candidate.is_file():
         raise FileNotFoundError(
-            f"Could not find mdata.h5mu. Checked: {candidate}\n"
-            "Hint: pass full file path or a directory that contains 'mdata.h5mu'."
+            f"Could not find file. Checked: {candidate}\n"
+            "Hint: pass full file path or a directory that contains the '.npz' file."
         )
-    mdata_real = md.read_h5mu(str(candidate))
+    ref_real = np.load(str(candidate, allow_pickle=True))
 
     reference_stats: Dict[str, Any] = {}
     # per-gene means
-    if "gene_name" in mdata_real["rna"].var.columns and "_gene_mean" in mdata_real["rna"].var.columns:
-        gn = mdata_real["rna"].var["gene_name"]
-        gm = mdata_real["rna"].var["_gene_mean"]
+    if "gene_name" in ref_real and "_gene_mean" in ref_real:
+        gn = ref_real["gene_name"]
+        gm = ref_real["_gene_mean"]
         reference_stats["gene_means"] = pd.Series(gm.values, index=gn.values)
     # guide-efficacy distribution from trained model (if present)
     try:
@@ -125,14 +125,14 @@ def load_resources(cfg: SimulationConfig) -> Tuple[Any, md.MuData, Dict[str, Any
         pass
     # optional empirical LFC samples
     try:
-        lfc_mat = mdata_real["rna"].varm.get("lfc", None)
+        lfc_mat = ref["lfc_mat"]
         if lfc_mat is not None:
             reference_stats["lfc_samples"] = np.asarray(lfc_mat).ravel()
     except Exception:
         pass
 
     print("Finish Loading Model and MuData_real.")
-    return model, mdata_real, reference_stats
+    return model, ref_real, reference_stats
 
 
 # -----------------
@@ -224,7 +224,7 @@ def _hierarchical_concat(chunk_list: List[md.MuData]) -> md.MuData:
 # Simulate from trained model (chunked)
 # -----------------
 
-def simulate_mudata_from_model(model, mdata_real: md.MuData,
+def simulate_mudata_from_model(model, ref_real: md.MuData,
                                n_cells_per_element: int,
                                element_gene_map: np.ndarray,
                                element_by_gene_lfc: np.ndarray,
@@ -281,7 +281,7 @@ def simulate_mudata_from_model(model, mdata_real: md.MuData,
         grna_counts_chunk = grna_counts[start:end].toarray()
 
         # borrow covariates from real data
-        n_cells_origin = mdata_real["rna"].X.shape[0]
+        n_cells_origin = int(ref_real.get("n_cells_origin", 0))
         chunk_indices = np.random.choice(n_cells_origin, size=grna_counts_chunk.shape[0], replace=False)
 
         pyro.clear_param_store()

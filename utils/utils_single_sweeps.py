@@ -16,9 +16,9 @@ from .utils_single_core import (
 )
 
 
-def _precompute_static_structures(model, mdata_real, cfg, reference_stats):
+def _precompute_static_structures(model, ref_real, cfg, reference_stats):
     """Compute pieces reused across sweeps."""
-    gene_names_origin = list(mdata_real["rna"].var["gene_name"])
+    gene_names_origin = list(ref_real["gene_name"])
     if cfg.gene_name not in gene_names_origin:
         raise ValueError(f"Gene {cfg.gene_name} not found in real data.")
     new_genes_idx = np.array([gene_names_origin.index(cfg.gene_name)] * cfg.n_genes)
@@ -35,9 +35,9 @@ def _precompute_static_structures(model, mdata_real, cfg, reference_stats):
 def power_vs_cells(cells_min, cells_max, n_bins, cfg: SimulationConfig, tcfg: TestConfig,
                    abort_flag: Optional[Callable[[], bool]] = None) -> pd.DataFrame:
     abort = abort_flag or (lambda: False)
-    model, mdata_real, reference_stats = load_resources(cfg)
+    model, ref_real, reference_stats = load_resources(cfg)
     new_genes_idx, element_gene_map, guide_efficacy = _precompute_static_structures(
-        model, mdata_real, cfg, reference_stats
+        model, ref_real, cfg, reference_stats
     )
 
     n_pos = cfg.n_genes
@@ -60,7 +60,7 @@ def power_vs_cells(cells_min, cells_max, n_bins, cfg: SimulationConfig, tcfg: Te
             return _detail_to_power_summary(list_dict, grouping_columns, tcfg)  # <-- this util already exists in your file
 
         mdata_sim = simulate_mudata_from_model(
-            model, mdata_real, int(n_cpe),
+            model, ref_real, int(n_cpe),
             element_gene_map, element_by_gene_lfc,
             guide_efficacy, new_genes_idx,
             cfg, reference_stats
@@ -79,9 +79,9 @@ def power_vs_lfc(lfc_min: float, lfc_max: float, n_bins: int,
                  cfg: SimulationConfig, tcfg: TestConfig,
                  abort_flag: Optional[Callable[[], bool]] = None) -> pd.DataFrame:
     abort = abort_flag or (lambda: False)
-    model, mdata_real, reference_stats = load_resources(cfg)
+    model, ref_real, reference_stats = load_resources(cfg)
     new_genes_idx, element_gene_map, guide_efficacy = _precompute_static_structures(
-        model, mdata_real, cfg, reference_stats
+        model, ref_real, cfg, reference_stats
     )
     xs = np.linspace(lfc_min, lfc_max, num=n_bins)
     list_dict = _create_empty_list(method="perturbo")
@@ -102,7 +102,7 @@ def power_vs_lfc(lfc_min: float, lfc_max: float, n_bins: int,
             n_genes=cfg_l.n_genes, cfg=cfg_l, reference_stats=reference_stats
         )
         mdata_sim = simulate_mudata_from_model(
-            model, mdata_real, int(fixed_cells_per_element),
+            model, ref_real, int(fixed_cells_per_element),
             element_gene_map, element_by_gene_lfc,
             guide_efficacy, new_genes_idx,
             cfg_l, reference_stats
@@ -123,9 +123,9 @@ def power_vs_nguides(n_guides_min: int, n_guides_max: int, step: int,
                      cfg: SimulationConfig, tcfg: TestConfig,
                      abort_flag: Optional[Callable[[], bool]] = None) -> pd.DataFrame:
     abort = abort_flag or (lambda: False)
-    model, mdata_real, reference_stats = load_resources(cfg)
+    model, ref_real, reference_stats = load_resources(cfg)
     new_genes_idx, element_gene_map, _ = _precompute_static_structures(
-        model, mdata_real, cfg, reference_stats
+        model, ref_real, cfg, reference_stats
     )
     n_pos = cfg.n_genes
     n_ntc = max(1, round(0.05 * n_pos))
@@ -150,7 +150,7 @@ def power_vs_nguides(n_guides_min: int, n_guides_max: int, step: int,
         cfg_g = replace(cfg, n_grna_per_element=int(g))
         guide_eff = _sample_guide_efficacy(n_all, cfg_g, reference_stats)
         mdata_sim = simulate_mudata_from_model(
-            model, mdata_real, int(fixed_cells_per_element),
+            model, ref_real, int(fixed_cells_per_element),
             element_gene_map, element_by_gene_lfc,
             guide_eff, new_genes_idx,
             cfg_g, reference_stats
@@ -170,9 +170,9 @@ def power_vs_moi(moi_min: float, moi_max: float, n_bins: int,
                  cfg: SimulationConfig, tcfg: TestConfig,
                  abort_flag: Optional[Callable[[], bool]] = None) -> pd.DataFrame:
     abort = abort_flag or (lambda: False)
-    model, mdata_real, reference_stats = load_resources(cfg)
+    model, ref_real, reference_stats = load_resources(cfg)
     new_genes_idx, element_gene_map, guide_efficacy = _precompute_static_structures(
-        model, mdata_real, cfg, reference_stats
+        model, ref_real, cfg, reference_stats
     )
     n_pos = cfg.n_genes
     n_ntc = max(1, round(0.05 * n_pos))
@@ -196,7 +196,7 @@ def power_vs_moi(moi_min: float, moi_max: float, n_bins: int,
         
         cfg_m = replace(cfg, moi=float(m))
         mdata_sim = simulate_mudata_from_model(
-            model, mdata_real, int(fixed_cells_per_element),
+            model, ref_real, int(fixed_cells_per_element),
             element_gene_map, element_by_gene_lfc,
             guide_efficacy, new_genes_idx,
             cfg_m, reference_stats
@@ -220,9 +220,9 @@ def power_vs_gene_mean(mean_min: float, mean_max: float, n_bins: int,
     relative to the original dataset mean for cfg.gene_name.
     """
     abort = abort_flag or (lambda: False)
-    model, mdata_real, reference_stats = load_resources(cfg)
+    model, ref_real, reference_stats = load_resources(cfg)
     new_genes_idx, element_gene_map, guide_efficacy = _precompute_static_structures(
-        model, mdata_real, cfg, reference_stats
+        model, ref_real, cfg, reference_stats
     )
     n_pos = cfg.n_genes
     n_ntc = max(1, round(0.05 * n_pos))
@@ -252,7 +252,7 @@ def power_vs_gene_mean(mean_min: float, mean_max: float, n_bins: int,
                         read_depth_adjust_factor=cfg.read_depth_adjust_factor * scale)
 
         mdata_sim = simulate_mudata_from_model(
-            model, mdata_real, int(fixed_cells_per_element),
+            model, ref_real, int(fixed_cells_per_element),
             element_gene_map, element_by_gene_lfc,
             guide_efficacy, new_genes_idx,
             cfg_m, reference_stats

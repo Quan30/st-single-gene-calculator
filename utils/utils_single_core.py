@@ -126,7 +126,7 @@ def load_resources(cfg: SimulationConfig) -> Tuple[Any, md.MuData, Dict[str, Any
         )
     ref_real = np.load(str(candidate), allow_pickle=True)
     
-    gene_names = ref_real["gene_names"]
+    gene_names = ref_real["gene_name"]
     adata_min = make_minimal_adata(gene_names)
     
     model_dir = Path(cfg.model_dir)

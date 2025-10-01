@@ -90,8 +90,8 @@ with st.expander("ℹ️ How this works", expanded=False):
 # Sidebar: Simulation & Test cfg
 # ------------------------------
 st.sidebar.header("⚙️ Simulation")
-model_dir = st.sidebar.text_input("Model directory", value="path/to/saved_model_dir")
-real_path = st.sidebar.text_input("Real data (mdata.h5mu or folder)", value="path/to/data_or_dir")
+model_dir = st.sidebar.text_input("Model directory", value="../save_model")
+real_path = st.sidebar.text_input("Parameters from Real data (.npz)", value="../save_model/model/reference_stats_compact.npz")
 accelerator = st.sidebar.selectbox("Accelerator (for simulation)", ["cpu", "gpu"], index=0)
 
 st.sidebar.divider()
@@ -196,7 +196,7 @@ if run_btn:
         st.error("Model directory not found. Point to the folder that contains a saved PerTurbo model (subdir 'model').")
         st.stop()
     if not os.path.exists(real_path):
-        st.error("Real data path not found. Provide a file path to 'mdata.h5mu' or a directory that contains it.")
+        st.error("Real data path not found. Provide a file path to '.npz' or a directory that contains it.")
         st.stop()
 
 df = None

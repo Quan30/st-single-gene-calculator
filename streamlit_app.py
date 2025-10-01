@@ -11,7 +11,14 @@ os.environ.setdefault("OMP_NUM_THREADS", "1")
 import torch, inspect
 torch.set_num_threads(1)
 
+# Your project utilities
 from utils import utils_single_core as _core  # so we can patch its function
+
+from utils.utils_single_core import SimulationConfig, TestConfig  # configs  ← :contentReference[oaicite:3]{index=3}
+from utils.utils_single_sweeps import (  # sweep runners               ← :contentReference[oaicite:4]{index=4}
+    power_vs_cells, power_vs_lfc, power_vs_nguides, power_vs_moi, power_vs_gene_mean
+)
+from utils.utils_single_plots import plot_power_generic  # matplotlib figure  ← :contentReference[oaicite:5]{index=5}
 
 @st.cache_resource(show_spinner=False)
 def _cached_load_resources(cfg: SimulationConfig):
@@ -20,12 +27,6 @@ def _cached_load_resources(cfg: SimulationConfig):
 # Monkey-patch the utils module so power_* uses the cached loader
 _core.load_resources = _cached_load_resources
 
-# Your project utilities
-from utils.utils_single_core import SimulationConfig, TestConfig  # configs  ← :contentReference[oaicite:3]{index=3}
-from utils.utils_single_sweeps import (  # sweep runners               ← :contentReference[oaicite:4]{index=4}
-    power_vs_cells, power_vs_lfc, power_vs_nguides, power_vs_moi, power_vs_gene_mean
-)
-from utils.utils_single_plots import plot_power_generic  # matplotlib figure  ← :contentReference[oaicite:5]{index=5}
 
 def render_results_from_state():
     """Render plot, table, and download buttons using st.session_state['results']."""

@@ -23,6 +23,7 @@ import torch
 import mudata as md
 import anndata as ad
 from scipy import stats
+import scipy.sparse as sp
 from scipy.sparse import random as sparse_random
 import matplotlib.pyplot as plt
 
@@ -96,13 +97,25 @@ class TestConfig:
 # Load resources
 # -----------------
 
+def make_minimal_adata(gene_names):
+    '''Create pseudo anndata s.t. loading the model do not have errors.'''
+
+    # zero cells, same variables (genes)
+    X = sp.csr_matrix((0, len(gene_names)))  # shape (0, n_genes)
+    var = pd.DataFrame(index=pd.Index(gene_names, name="gene_name"))  # name optional
+    obs = pd.DataFrame(index=pd.Index([], name="cell"))
+
+    adata = ad.AnnData(X=X, obs=obs, var=var)
+
+    # Minimal PerTurbo/scvi setup; if your training used custom keys,
+    perturbo.PERTURBO.setup_anndata(adata)  # defaults are fine if you used defaults
+    return adata
+
+
 def load_resources(cfg: SimulationConfig) -> Tuple[Any, md.MuData, Dict[str, Any]]:
     """Load trained PerTurbo model + Parameter extracted from real MuData (.npz) and build reference_stats."""
     print("Start Loading Model and MuData_real.")
     pyro.clear_param_store()
-
-    model_dir = Path(cfg.model_dir)
-    model = perturbo.PERTURBO.load(model_dir / "model")
 
     real_path = Path(cfg.real_data_ref_path)
     candidate = real_path / "reference_stats_compact.npz" if real_path.is_dir() else real_path
@@ -112,6 +125,12 @@ def load_resources(cfg: SimulationConfig) -> Tuple[Any, md.MuData, Dict[str, Any
             "Hint: pass full file path or a directory that contains the '.npz' file."
         )
     ref_real = np.load(str(candidate, allow_pickle=True))
+    
+    gene_names = ref_real["gene_names"]
+    adata_min = make_minimal_adata(gene_names)
+    
+    model_dir = Path(cfg.model_dir)
+    model = perturbo.PERTURBO.load(model_dir / "model", adata=adata_min)
 
     reference_stats: Dict[str, Any] = {}
     # per-gene means

@@ -8,8 +8,6 @@ import streamlit as st
 import pandas as pd
 
 import torch, inspect
-st.write("Torch version:", torch.__version__)
-st.write("torch.load signature:", inspect.signature(torch.load))
 
 # Your project utilities
 from utils.utils_single_core import SimulationConfig, TestConfig  # configs  ← :contentReference[oaicite:3]{index=3}

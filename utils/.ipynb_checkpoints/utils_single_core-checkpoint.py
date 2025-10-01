@@ -102,46 +102,54 @@ def make_minimal_mdata(gene_names, *, layer=None, obs_cols=None, grna_var_names=
     
     obs_cols = obs_cols or []
     
-    # -------- RNA modality (1 dummy cell) --------
-    n_genes = len(gene_names)
-    # Use small non-zero counts so library size > 0 (all ones is simplest)
-    X_rna = sp.csr_matrix(np.ones((1, n_genes), dtype=np.float32))
-    var_rna = pd.DataFrame(index=pd.Index(gene_names, name="features"))
+    # ---------- shared obs (exactly one cell) ----------
     obs = pd.DataFrame(index=pd.Index(["dummy_cell"], name="cell"))
     for c in obs_cols:
-        obs[c] = pd.Series([""], index=obs.index, dtype="category")
+        # keep dtypes categorical but non-empty
+        obs[c] = pd.Series(pd.Categorical([""]), index=obs.index)
 
+    # ---------- RNA modality: 1 row, non-zero counts ----------
+    n_genes = len(gene_names)
+    X_rna = sp.csr_matrix(np.ones((1, n_genes), dtype=np.float32))  # all ones -> libsize > 0
+    var_rna = pd.DataFrame(index=pd.Index(gene_names, name="features"))
     rna = ad.AnnData(X=X_rna, obs=obs.copy(), var=var_rna)
     if layer is not None:
         rna.layers[layer] = rna.X  # e.g., "counts" if you trained on that layer
+    # Pre-populate obs fields so setup_mudata won't try to infer (and divide by zero)
+    rna.obs["umi_count"] = np.asarray(rna.X.sum(axis=1)).ravel()  # > 0
+    rna.obs["_size_factor"] = 0.0  # any finite scalar is OK
 
-    # Precompute required obs fields so setup_mudata won't try to infer them
-    obs["_libsize"] = np.asarray(rna.X.sum(axis=1)).ravel()  # > 0
-    # any finite value is OK; centered log-CPM is what code would compute — use 0.0
-    obs["_size_factor"] = 0.0
-    rna.obs = obs.copy()
-
-    # -------- gRNA modality (1 dummy cell, 0/≥1 guides) --------
+    # ---------- gRNA modality: 1 row, zeros OK ----------
     if not grna_var_names:
         grna_var_names = ["dummy_guide"]
     grna_idx = pd.Index(grna_var_names, name="features")
-    X_grna = sp.csr_matrix((1, len(grna_idx)), dtype=np.float32)  # all zeros OK
+    X_grna = sp.csr_matrix((1, len(grna_idx)), dtype=np.float32)  # all zeros
     grna = ad.AnnData(X=X_grna, obs=obs.copy(), var=pd.DataFrame(index=grna_idx))
 
-    # -------- Assemble MuData --------
+    # ---------- assemble MuData ----------
     mdata = md.MuData({"rna": rna, "grna": grna})
 
-    # -------- Register with PerTurbo (MuData-first API) --------
+    # Sanity checks BEFORE calling setup_mudata
+    assert mdata.mod["rna"].n_obs == 1 and mdata.mod["grna"].n_obs == 1, (
+        mdata.mod["rna"].n_obs, mdata.mod["grna"].n_obs
+    )
+    assert (mdata.mod["rna"].obs_names == mdata.mod["grna"].obs_names).all(), \
+        "RNA/GRNA obs indices must match"
+    assert mdata.mod["rna"].var.index.name == mdata.mod["grna"].var.index.name == "features"
+
+    # ---------- register with PerTurbo (MuData-first API) ----------
+    print("DEBUG pre-setup shapes:",
+      "rna", mdata.mod["rna"].X.shape,
+      "grna", mdata.mod["grna"].X.shape,
+      "obs equal?", (mdata.mod["rna"].obs_names == mdata.mod["grna"].obs_names).all())
     perturbo.PERTURBO.setup_mudata(
         mdata,
-        modalities={"rna_layer": "rna", "perturbation_layer": "grna"},
-        # Inside each AnnData, which matrix to use:
-        rna_layer=layer,            # None → use .X, or "counts" if you trained on that layer
-        perturbation_layer=None,    # None → use .X for gRNA
-        # Provide obs keys so it won't try to infer (and divide by zero)
-        library_size_key="_libsize",
+        modalities={"rna_layer": "rna", "perturbation_layer": "grna"},  # critical
+        rna_layer=layer,            # None -> use .X ; or "counts" if trained on a layer
+        perturbation_layer=None,    # None -> use .X for gRNA
+        library_size_key="umi_count",
         size_factor_key="_size_factor",
-        # Mirror training-time kwargs here if you used them:
+        # mirror any training-time keys if used:
         # batch_key="batch",
         # continuous_covariates_keys=[...],
         # gene_by_element_key=...,
@@ -149,6 +157,9 @@ def make_minimal_mdata(gene_names, *, layer=None, obs_cols=None, grna_var_names=
         # rna_element_uns_key=...,
         # guide_element_uns_key=...,
     )
+
+    # Sanity AFTER setup: should still be 1 row
+    assert mdata.mod["rna"].n_obs == 1, "RNA lost rows during setup_mudata"
     return mdata
 
 

@@ -102,7 +102,7 @@ def make_minimal_mdata(gene_names, *, layer=None, obs_cols=None, grna_var_names=
     
     # ---- RNA (0 cells) ----
     X_rna = sp.csr_matrix((0, len(gene_names)))
-    var_rna = pd.DataFrame(index=pd.Index(gene_names, name="features"))  # <-- same name
+    var_rna = pd.DataFrame(index=pd.Index(gene_names, name="features"))  # same name across mods
     obs = pd.DataFrame(index=pd.Index([], name="cell"))
     for c in obs_cols:
         obs[c] = pd.Series(dtype="category")
@@ -111,9 +111,13 @@ def make_minimal_mdata(gene_names, *, layer=None, obs_cols=None, grna_var_names=
         rna.layers[layer] = rna.X
 
     # ---- gRNA (0 cells) ----
-    grna_idx = pd.Index(grna_var_names if grna_var_names is not None else [], name="features")  # <-- same name
+    # ensure at least one dummy guide if none provided (some stacks dislike 0 vars)
+    if not grna_var_names:
+        grna_var_names = ["dummy_guide"]
+    grna_idx = pd.Index(grna_var_names, name="features")               # same name
     X_grna = sp.csr_matrix((0, len(grna_idx)))
     grna = ad.AnnData(X=X_grna, obs=obs.copy(), var=pd.DataFrame(index=grna_idx))
+
 
     # Assemble MuData with both modalities
     mdata = md.MuData({"rna": rna, "grna": grna})

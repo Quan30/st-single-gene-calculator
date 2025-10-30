@@ -7,9 +7,9 @@ import zipfile
 import streamlit as st
 import pandas as pd
 
-os.environ.setdefault("OMP_NUM_THREADS", "1")
+#os.environ.setdefault("OMP_NUM_THREADS", "1")
 import torch, inspect
-torch.set_num_threads(1)
+#torch.set_num_threads(1)
 
 # Your project utilities
 from utils import utils_single_core as _core  # so we can patch its function
@@ -20,12 +20,12 @@ from utils.utils_single_sweeps import (  # sweep runners               ← :cont
 )
 from utils.utils_single_plots import plot_power_generic  # matplotlib figure  ← :contentReference[oaicite:5]{index=5}
 
-@st.cache_resource(show_spinner=False)
-def _cached_load_resources(cfg: SimulationConfig):
-    return _core.load_resources(cfg)
+#@st.cache_resource(show_spinner=False)
+#def _cached_load_resources(cfg: SimulationConfig):
+#    return _core.load_resources(cfg)
 
 # Monkey-patch the utils module so power_* uses the cached loader
-_core.load_resources = _cached_load_resources
+#_core.load_resources = _cached_load_resources
 
 
 def render_results_from_state():

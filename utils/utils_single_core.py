@@ -33,7 +33,7 @@ try:
 except Exception:
     _scipy_ecdf = None
     
-torch.serialization.add_safe_globals([np.core.multiarray._reconstruct])
+#torch.serialization.add_safe_globals([np.core.multiarray._reconstruct])
 
 # ---- PerTurbo import ----
 # Assumes perturbo is importable. If not, uncomment and customize:
@@ -119,7 +119,7 @@ def load_resources(cfg: SimulationConfig) -> Tuple[Any, md.MuData, Dict[str, Any
     if "gene_name" in ref_real and "_gene_mean" in ref_real:
         gn = ref_real["gene_name"]
         gm = ref_real["_gene_mean"]
-        reference_stats["gene_means"] = pd.Series(gm.values, index=gn.values)
+        reference_stats["gene_means"] = pd.Series(gm, index=gn)
     # guide-efficacy distribution from trained model (if present)
     try:
         eff = model.module.guide.median()["guide_efficacy"].cpu().numpy().reshape(-1)

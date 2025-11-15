@@ -1,0 +1,5 @@
+# ignore local-only folders
+.ipynb_checkpoints/
+
+/save_model_*/model/mdata_tiny.h5mu
+/save_model_*/.ipynb_checkpoints/

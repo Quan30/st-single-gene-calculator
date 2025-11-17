@@ -46,9 +46,11 @@ class DatasetConfig:
     
     def power_file_path(self) -> str:
         if "gasperini" in self.dataset_name.lower():
-            return "gasperini_res"
+            # return "gasperini_res"
+            return "/srv/perturbo/st-single-gene-calculator/streamlit/gasperini_res"
         elif "weissman" in self.dataset_name.lower():
-            return "weissman_res"
+            # return "weissman_res"
+            return "/srv/perturbo/st-single-gene-calculator/streamlit/weissman_res"
         
     def power_filename_base(self) -> str:
         # Example: "power_moi30_empirical_FDR_0.1" and "power_moi30_allLFC_empirical_FDR_0.1"

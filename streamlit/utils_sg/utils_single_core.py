@@ -109,23 +109,26 @@ def load_resources(cfg: SimulationConfig) -> Tuple[Any, np.lib.npyio.NpzFile, Di
     
     # Read differnet datasets
     if cfg.orig_data_name == "Gasperini (high MOI)": 
-        model_dir = Path("../save_model_gasperini/model")
+        # model_dir = Path("../save_model_gasperini/model")
+        model_dir = Path("/srv/perturbo/st-single-gene-calculator/save_model_gasperini/model")
         mdata_tiny = md.read_h5mu(f'{model_dir}/mdata_tiny.h5mu')
         print(f"Model is loaded from path: {model_dir}")
         model = perturbo.PERTURBO.load(model_dir, adata=mdata_tiny)
 
-        real_path = Path("../save_model_gasperini/model/reference_stats_compact.npz")
+        # real_path = Path("../save_model_gasperini/model/reference_stats_compact.npz")
+        real_path = Path("/srv/perturbo/st-single-gene-calculator/save_model_gasperini/model/reference_stats_compact.npz")
         mdata_real = np.load(real_path, allow_pickle=True)
         print(f"mdata_real: {mdata_real}")
         
     elif cfg.orig_data_name == "Weissman (low MOI)": 
-        model_dir = Path("../save_model_replogle/model")
+        # model_dir = Path("../save_model_replogle/model")
+        model_dir = Path("/srv/perturbo/st-single-gene-calculator/save_model_replogle/model")
         mdata_tiny = md.read_h5mu(f'{model_dir}/mdata_tiny.h5mu')
         print(f"Model is loaded from path: {model_dir}")
         model = perturbo.PERTURBO.load(model_dir, adata=mdata_tiny)
 
-        #real_path = Path("../Weissman_ess/save_model/model_mixture/mdata.h5mu")
-        real_path = Path("../save_model_replogle/model/reference_stats_compact.npz")
+        # real_path = Path("../save_model_replogle/model/reference_stats_compact.npz")
+        real_path = Path("/srv/perturbo/st-single-gene-calculator/save_model_replogle/model/reference_stats_compact.npz")
         mdata_real = np.load(real_path, allow_pickle=True)
         print(f"mdata_real: {mdata_real}")
 

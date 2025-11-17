@@ -99,11 +99,11 @@ st.sidebar.markdown("---")
 st.sidebar.subheader("Cost parameters")
 
 num_reads_per_flow_cell = st.sidebar.number_input(
-    "Reads per flow cell (Mio.)", min_value=1, value=400, step=10, format="%.0f",
+    "Reads per flow cell (Mio.)", min_value=1, value=400, step=10, format="%d",
     help="Total sequencing reads produced per flow cell, in millions."
 ) * 1e6
 num_cells_per_lane = st.sidebar.number_input(
-    "Cells per lane", min_value=1.0, value=20000.0, step=1000.0, format="%.0f",
+    "Cells per lane", min_value=1.0, value=20000, step=1000, format="%d",
     help="Number of cells loaded per sequencing lane."
 )
 num_lanes_per_kit = st.sidebar.number_input(

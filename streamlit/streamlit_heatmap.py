@@ -40,11 +40,11 @@ dataset_name = st.sidebar.selectbox(
     help="Choose which result table to load (affects MOI and file names).",
 )
 
-alpha = st.sidebar.number_input(
+alpha = st.sidebar.selectbox(
     "alpha",
-    min_value=0.0, max_value=1.0, value=0.1, step=0.01,
-    format="%.2f",
-    help="Used in the file name, e.g. *_0.1.csv",
+    options=[0.05, 0.10],
+    index=1,
+    help="Choose the significance threshold",
 )
 
 budget_eur = st.sidebar.number_input(
@@ -57,19 +57,24 @@ st.sidebar.markdown("---")
 st.sidebar.subheader("Cost parameters")
 
 num_reads_per_flow_cell = st.sidebar.number_input(
-    "num_reads_per_flow_cell (Mio.)", min_value=1, value=400, step=10, format="%.0f"
+    "Reads per flow cell (Mio.)", min_value=1, value=400, step=10, format="%.0f",
+    help="Total sequencing reads produced per flow cell, in millions."
 ) * 1e6
 num_cells_per_lane = st.sidebar.number_input(
-    "num_cells_per_lane", min_value=1.0, value=20000.0, step=1000.0, format="%.0f"
+    "Cells per lane", min_value=1.0, value=20000.0, step=1000.0, format="%.0f",
+    help="Number of cells loaded per sequencing lane."
 )
 num_lanes_per_kit = st.sidebar.number_input(
-    "num_lanes_per_kit", min_value=1, value=6, step=1, format="%d"
+    "Lanes per kit", min_value=1, value=6, step=1, format="%d",
+    help="Number of sequencing lanes included in one kit."
 )
 lib_prep_cost_per_cell = st.sidebar.number_input(
-    "lib_prep_cost_per_cell (EUR)", min_value=0.0, value=0.05, step=0.01, format="%.2f"
+    "Lib prep cost / cell (EUR)", min_value=0.0, value=0.05, step=0.01, format="%.2f",
+    help="Library preparation cost per cell in EUR."
 )
 seq_cost_per_mio = st.sidebar.number_input(
-    "seq_cost_per_mio (EUR per 1e6 reads)", min_value=0.0, value=3.42, step=0.1, format="%.2f"
+    "Seq cost / 1M reads (EUR)", min_value=0.0, value=3.42, step=0.1, format="%.2f",
+    help="Sequencing cost in EUR per million reads"
 )
 
 # --- Run button gating ---

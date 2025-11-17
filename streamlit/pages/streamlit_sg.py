@@ -76,14 +76,41 @@ def render_results_from_state():
 
 
 st.set_page_config(page_title="PerTurbo Power Explorer", layout="wide")
-st.title("🔬 PerTurbo Power Explorer — Streamlit")
+st.title("🔬 PerTurbo Single Gene Calculator")
 st.caption("Configure a simulation on the left, run a sweep, and download the plot/data.")
 
 with st.expander("ℹ️ How this works", expanded=False):
     st.markdown(
-        "- Uses your existing utilities to simulate data and estimate power.\n"
-        "- Heavy lifting happens in `utils_single_*` modules (training a small PerTurbo model each run).\n"
-        "- For quick tests, lower `max_epochs` / `batch_size` or set a small #cells.\n"
+        """
+        **What this app does**
+
+        - You choose a real dataset (Gasperini or Weissman) and a simulation design on the left
+          (gene, MOI, guides per element, effect sizes, read depth, etc.).
+        - The app builds a `SimulationConfig` and a `TestConfig` and calls the
+          `power_vs_*` helper functions in `utils_sg.utils_single_sweeps`.
+        - For each point along the selected x-axis (cells per element, LFC, guides per element,
+          MOI, or gene mean), it:
+          1. Simulates a single-gene CRISPR screen under the chosen design,
+          2. Fits the PerTurbo model with your training settings,
+          3. Runs the statistical test and records whether the effect is detected.
+        - Power is estimated as the fraction of simulations where the effect is detected.
+
+        **What you see on the right**
+
+        - A power curve: estimated power vs. the chosen x-axis quantity.
+        - A summary table with the exact values for each sweep point.
+        - Download buttons for:
+          - CSV (summary table),
+          - PNG/PDF (plot),
+          - ZIP (all of the above in one file).
+
+        **Tips for faster runs**
+
+        - Reduce **Max epochs** or increase **Batch size**.
+        - Use fewer **Bins (or points)** or a narrower Min/Max range.
+        - Start with smaller designs (fewer cells / guides) to explore settings,
+          then scale up once you’ve found interesting regions.
+        """
     )
 
 # ------------------------------
@@ -234,6 +261,10 @@ with left:
     step = st.number_input("Step (Guides mode only)", 1, 100, 1, step=1,
                           help="Step size in guides per element when the x-axis is 'Guides per element'.")
 
+    st.caption(
+        "⚠️ Running the sweep trains a PerTurbo model for each point and can take a few minutes "
+        "depending on the number of bins, cells, and training settings."
+    )
     col_run, col_stop = st.columns(2)
     with col_run:
         run_btn = st.button("🚀 Run", type="primary", width='stretch', key="run_btn")

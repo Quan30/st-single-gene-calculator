@@ -21,12 +21,54 @@ from utils_hp.utils_single_sweeps import (
     build_budget_power_curve,
 )
 
+import warnings
+warnings.filterwarnings("ignore")
+
 st.set_page_config(page_title="CRISPR Power vs Budget", layout="wide")
+
+# ------------------------------
+# Title + How this works
+# ------------------------------
+st.title("PerTurbo Power vs Budget")
+st.caption("Choose a dataset, set your budget and cost assumptions, then explore power vs. design and spending.")
+
+with st.expander("ℹ️ How this works", expanded=False):
+    st.markdown(
+        """
+        **What this app does**
+
+        - Loads precomputed power tables for the selected dataset and significance level (α).
+        - Each row in the table corresponds to a CRISPR screen design:
+          number of cells per element, read depth (UMIs per cell), and other settings.
+        - Given your cost parameters (library prep + sequencing), it computes the **total cost**
+          of each design.
+        - For a chosen budget, it:
+          1. Identifies all designs that are affordable,
+          2. Draws a **budget boundary** on the power heatmap,
+          3. Marks the **best affordable design** (highest power) with a star.
+
+        **What you see**
+
+        - **Left panel**: Power heatmap over *Cells per element × Read depth*.
+          - Black step curve = budget boundary.
+          - Black star = best affordable combination under the given budget.
+          - Download buttons for the heatmap (PNG/PDF).
+        - **Right panel**: Curve of **maximum reachable power vs. budget**,
+          showing how much power you gain as you spend more.
+
+        **Tips**
+
+        - Adjust the cost parameters in the sidebar to match your lab's platform and kit pricing.
+        - Try different budgets and α levels to see how robust your design is.
+        - If the heatmap looks empty or no combination fits the budget, try increasing the budget
+          or lowering per-cell/per-read costs.
+        """
+    )
 
 # ------------------------------
 # Sidebar controls
 # ------------------------------
-# Switch Paages
+# Switch Pages
 st.sidebar.header("Navigation")
 if st.sidebar.button("Go to Single Gene Calculator"):
     st.switch_page("pages/streamlit_sg.py")
@@ -49,7 +91,7 @@ alpha = st.sidebar.selectbox(
 
 budget_eur = st.sidebar.number_input(
     "Budget (EUR)",
-    min_value=0.0, value=10000.0, step=1000.0, format="%.0f",
+    min_value=0.0, value=40000.0, step=1000.0, format="%.0f",
     help="Total available budget (euros).",
 )
 

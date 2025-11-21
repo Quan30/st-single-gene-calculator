@@ -252,9 +252,9 @@ with left:
 
     fixed_cells = st.number_input("Fixed cells/element (for LFC/Guides/MOI/GeneMean)", 10, 1_000_000, 200, step=10,
                                  help="Number of cells per element used when sweeping LFC/Guides/MOI/Gene mean.")
-    min_val = st.number_input("Min", value=0.2,
+    min_val = st.number_input("Min", value=50,
                              help="Lower bound of the sweep range for the selected x-axis parameter.")
-    max_val = st.number_input("Max", value=1.0,
+    max_val = st.number_input("Max", value=500,
                              help="Upper bound of the sweep range for the selected x-axis parameter.",)
     n_bins = st.number_input("Bins (or points)", 2, 200, 5, step=1,
                             help="Number of points between Min and Max for the sweep.")

@@ -12,6 +12,7 @@ Core utilities for PerTurbo power experiments:
 from dataclasses import dataclass
 from typing import Optional, Sequence, Dict, Any, Tuple, List
 from pathlib import Path
+import copy
 
 import numpy as np
 import pandas as pd
@@ -44,6 +45,7 @@ except Exception:
 # import sys
 # sys.path.insert(0, r"/path/to/PerTurbo/src")
 import perturbo  # noqa: E402
+from perturbo.utils.utils import compute_empirical_pvals
 
 warnings.filterwarnings("ignore", category=FutureWarning)
 warnings.filterwarnings("ignore", category=UserWarning)
@@ -87,7 +89,7 @@ class SimulationConfig:
 @dataclass
 class TestConfig:
     alpha: float = 0.1
-    mt_method: str = "FDR"          # 'none' or 'FDR'
+    mt_method: str = "fdr_bh"          # None or 'fdr_bh'
     test_type: str = "empirical"    # 'fixed' or 'empirical'
     max_epochs: int = 500
     lr: float = 0.01
@@ -109,26 +111,28 @@ def load_resources(cfg: SimulationConfig) -> Tuple[Any, np.lib.npyio.NpzFile, Di
     
     # Read differnet datasets
     if cfg.orig_data_name == "Gasperini (high MOI)": 
-        # model_dir = Path("../save_model_gasperini/model")
-        model_dir = Path("/srv/perturbo/st-single-gene-calculator/save_model_gasperini/model")
+        model_dir = Path("../save_model_gasperini/model")
+        # model_dir = Path("/srv/perturbo/st-single-gene-calculator/save_model_gasperini/model")
         mdata_tiny = md.read_h5mu(f'{model_dir}/mdata_tiny.h5mu')
         print(f"Model is loaded from path: {model_dir}")
         model = perturbo.PERTURBO.load(model_dir, adata=mdata_tiny)
+        _pristine_state = copy.deepcopy(model.module.state_dict())
 
-        # real_path = Path("../save_model_gasperini/model/reference_stats_compact.npz")
-        real_path = Path("/srv/perturbo/st-single-gene-calculator/save_model_gasperini/model/reference_stats_compact.npz")
+        real_path = Path("../save_model_gasperini/model/reference_stats_compact.npz")
+        # real_path = Path("/srv/perturbo/st-single-gene-calculator/save_model_gasperini/model/reference_stats_compact.npz")
         mdata_real = np.load(real_path, allow_pickle=True)
         print(f"mdata_real: {mdata_real}")
         
     elif cfg.orig_data_name == "Weissman (low MOI)": 
-        # model_dir = Path("../save_model_replogle/model")
-        model_dir = Path("/srv/perturbo/st-single-gene-calculator/save_model_replogle/model")
+        model_dir = Path("../save_model_replogle/model")
+        # model_dir = Path("/srv/perturbo/st-single-gene-calculator/save_model_replogle/model")
         mdata_tiny = md.read_h5mu(f'{model_dir}/mdata_tiny.h5mu')
         print(f"Model is loaded from path: {model_dir}")
         model = perturbo.PERTURBO.load(model_dir, adata=mdata_tiny)
+        _pristine_state = copy.deepcopy(model.module.state_dict())
 
-        # real_path = Path("../save_model_replogle/model/reference_stats_compact.npz")
-        real_path = Path("/srv/perturbo/st-single-gene-calculator/save_model_replogle/model/reference_stats_compact.npz")
+        real_path = Path("../save_model_replogle/model/reference_stats_compact.npz")
+        # real_path = Path("/srv/perturbo/st-single-gene-calculator/save_model_replogle/model/reference_stats_compact.npz")
         mdata_real = np.load(real_path, allow_pickle=True)
         print(f"mdata_real: {mdata_real}")
 
@@ -156,7 +160,7 @@ def load_resources(cfg: SimulationConfig) -> Tuple[Any, np.lib.npyio.NpzFile, Di
         pass
 
     print("Finish Loading Model and MuData_real.")
-    return model, mdata_real, reference_stats
+    return model, mdata_real, reference_stats, _pristine_state
 
 
 # -----------------
@@ -257,6 +261,7 @@ def simulate_mudata_from_model(model, mdata_real: np.lib.npyio.NpzFile,
                                new_genes_idx: np.ndarray,
                                cfg: SimulationConfig,
                                reference_stats: Dict[str, Any],
+                               _pristine_state,   # fix model state
                                chunk_size: int = 100000) -> md.MuData:
     """
     Use perturbo.simulation.simulate_data_from_trained_model to generate MuData.
@@ -339,6 +344,7 @@ def simulate_mudata_from_model(model, mdata_real: np.lib.npyio.NpzFile,
         chunk_indices = subset_indices[start:end]
 
         pyro.clear_param_store()
+        model.module.load_state_dict(_pristine_state, strict=True)
         mdata_chunk = perturbo.simulation.simulate_data_from_trained_model(
             model,
             guide_obs=grna_counts_chunk,
@@ -664,6 +670,50 @@ def _ecdf_values(x: np.ndarray, sample: np.ndarray) -> np.ndarray:
     return np.searchsorted(s, x, side="right") / (len(s) + 1.0)
 
 
+# def _empirical_multipletesting_correction(
+#     detail_df: pd.DataFrame,
+#     test_type: str,
+#     MTmethod: str,
+#     alpha_base: float,
+#     grouping_columns: Sequence[str],
+# ) -> pd.DataFrame:
+#     if test_type == "empirical":
+#         pos = detail_df[detail_df["TrueLabel"] == "cis"].copy()
+#         neg = detail_df[detail_df["TrueLabel"] == "ntc"].copy()
+
+#         for key, pos_grp in pos.groupby(grouping_columns):
+#             mask_neg = (neg[grouping_columns].apply(tuple, axis=1) == tuple(key))
+#             neg_grp = neg.loc[mask_neg]
+#             if len(neg_grp) == 0:
+#                 # fallback: use raw P_value
+#                 detail_df.loc[pos_grp.index, "P_value_empi"] = pos_grp["P_value"].values
+#                 continue
+#             emp_pos = _ecdf_values(pos_grp["P_value"].values, neg_grp["P_value"].values)
+#             emp_neg = _ecdf_values(neg_grp["P_value"].values, neg_grp["P_value"].values)
+#             pos.loc[pos_grp.index, "P_value_empi"] = emp_pos
+#             neg.loc[neg_grp.index, "P_value_empi"] = emp_neg
+
+#         detail_df_empi = pd.concat([pos, neg], axis=0)
+#     else:
+#         detail_df_empi = detail_df.copy()
+#         detail_df_empi["P_value_empi"] = detail_df_empi["P_value"]
+
+#     if MTmethod == "FDR":
+#         from statsmodels.stats.multitest import multipletests
+#         detail_df_empi["P_value_cor"] = np.nan
+#         for _, grp in detail_df_empi.groupby(grouping_columns):
+#             idx = grp.index
+#             pvals = grp["P_value_empi"].dropna().values
+#             if len(pvals) == 0:
+#                 continue
+#             _, pvals_corrected, _, _ = multipletests(pvals, alpha=alpha_base, method="fdr_bh")
+#             detail_df_empi.loc[idx, "P_value_cor"] = pvals_corrected
+#     else:
+#         detail_df_empi["P_value_cor"] = detail_df_empi["P_value_empi"]
+#     #print(f"Detailed DataFrame with eFDR corrected P_value: {detail_df_empi}")
+
+#     return detail_df_empi
+
 def _empirical_multipletesting_correction(
     detail_df: pd.DataFrame,
     test_type: str,
@@ -671,42 +721,105 @@ def _empirical_multipletesting_correction(
     alpha_base: float,
     grouping_columns: Sequence[str],
 ) -> pd.DataFrame:
-    if test_type == "empirical":
-        pos = detail_df[detail_df["TrueLabel"] == "cis"].copy()
-        neg = detail_df[detail_df["TrueLabel"] == "ntc"].copy()
 
-        for key, pos_grp in pos.groupby(grouping_columns):
-            mask_neg = (neg[grouping_columns].apply(tuple, axis=1) == tuple(key))
-            neg_grp = neg.loc[mask_neg]
-            if len(neg_grp) == 0:
-                # fallback: use raw P_value
-                detail_df.loc[pos_grp.index, "P_value_empi"] = pos_grp["P_value"].values
-                continue
-            emp_pos = _ecdf_values(pos_grp["P_value"].values, neg_grp["P_value"].values)
-            emp_neg = _ecdf_values(neg_grp["P_value"].values, neg_grp["P_value"].values)
-            pos.loc[pos_grp.index, "P_value_empi"] = emp_pos
-            neg.loc[neg_grp.index, "P_value_empi"] = emp_neg
+    # choose label column (same as before)
+    label_col = "cis_label" if test_type == "cis" else "TrueLabel"
+    alpha_col = "alpha_cor"
 
-        detail_df_empi = pd.concat([pos, neg], axis=0)
-    else:
-        detail_df_empi = detail_df.copy()
-        detail_df_empi["P_value_empi"] = detail_df_empi["P_value"]
+    # ensure MTmethod exists as a column (same as before)
+    detail_df = detail_df.copy()
+    if "MTmethod" not in detail_df.columns:
+        detail_df["MTmethod"] = MTmethod
 
-    if MTmethod == "FDR":
-        from statsmodels.stats.multitest import multipletests
-        detail_df_empi["P_value_cor"] = np.nan
-        for _, grp in detail_df_empi.groupby(grouping_columns):
-            idx = grp.index
-            pvals = grp["P_value_empi"].dropna().values
-            if len(pvals) == 0:
-                continue
-            _, pvals_corrected, _, _ = multipletests(pvals, alpha=alpha_base, method="fdr_bh")
-            detail_df_empi.loc[idx, "P_value_cor"] = pvals_corrected
-    else:
-        detail_df_empi["P_value_cor"] = detail_df_empi["P_value_empi"]
-    #print(f"Detailed DataFrame with eFDR corrected P_value: {detail_df_empi}")
+    # ensure MTmethod participates in grouping (same as before)
+    grouping_columns = list(grouping_columns)
+    if "MTmethod" not in grouping_columns:
+        grouping_columns.append("MTmethod")
 
-    return detail_df_empi
+    # PerTurbo's empirical p-val utility expects a *test statistic* where
+    # "larger = more extreme". The old code used smaller P_value as more extreme.
+    # A monotone transform that preserves ordering is -log10(P_value).
+    eps = np.finfo(float).tiny
+    stat_col = "_stat_empirical"
+    detail_df[stat_col] = -np.log10(detail_df["P_value"].clip(lower=eps))
+
+    corrected_groups = []
+
+    # match old semantics: empirical p-values computed *within each group*
+    for _, group_df in detail_df.groupby(grouping_columns, dropna=False):
+        pos_group = group_df[group_df[label_col] == "cis"].copy()
+        neg_group = group_df[group_df[label_col] == "ntc"].copy()
+
+        # If a group lacks nulls, we cannot do empirical calibration; keep NaNs.
+        if (len(pos_group) == 0) or (len(neg_group) == 0):
+            group_df = group_df.copy()
+            group_df["P_value_empi"] = np.nan
+            group_df["P_value_cor"] = np.nan
+            group_df[alpha_col] = 0
+            corrected_groups.append(group_df)
+            continue
+
+        # allow per-group MT correction method (as before, via the MTmethod column)
+        mtm = MTmethod
+
+        # empirical p-values (unadjusted)
+        pos_group["P_value_empi"] = compute_empirical_pvals(
+            data_real=pos_group,
+            data_shuffled=neg_group,
+            value_col=stat_col,
+            group_col=None,
+            two_sided=False,
+            bias_correction=False,
+            winsor=None,
+            pval_adj_method=None,
+        )
+        # old code also computed "empirical p-values" for the nulls themselves via ECDF(null);
+        # we reproduce that by using the null set as both real+shuffled.
+        neg_group["P_value_empi"] = compute_empirical_pvals(
+            data_real=neg_group,
+            data_shuffled=neg_group,
+            value_col=stat_col,
+            group_col=None,
+            two_sided=False,
+            bias_correction=False,
+            winsor=None,
+            pval_adj_method=None,
+        )
+
+        # multiple testing correction on empirical p-values (default: BH / fdr_bh)
+        pos_group["P_value_cor"] = compute_empirical_pvals(
+            data_real=pos_group,
+            data_shuffled=neg_group,
+            value_col=stat_col,
+            group_col=None,
+            two_sided=False,
+            bias_correction=False,
+            winsor=None,
+            pval_adj_method=mtm,
+        )
+        neg_group["P_value_cor"] = compute_empirical_pvals(
+            data_real=neg_group,
+            data_shuffled=neg_group,
+            value_col=stat_col,
+            group_col=None,
+            two_sided=False,
+            bias_correction=False,
+            winsor=None,
+            pval_adj_method=mtm,
+        )
+
+        # mark discoveries at alpha_base (same as before)
+        pos_group[alpha_col] = (pos_group["P_value_cor"] < alpha_base).astype(int)
+        neg_group[alpha_col] = (neg_group["P_value_cor"] < alpha_base).astype(int)
+
+        corrected_groups.append(pd.concat([pos_group, neg_group], axis=0))
+
+    detail_df_correct = pd.concat(corrected_groups, axis=0)
+
+    # cleanup helper column
+    detail_df_correct = detail_df_correct.drop(columns=[stat_col], errors="ignore")
+
+    return detail_df_correct
 
 
 def _detail_to_power_summary(list_dict: Dict[str, list],

@@ -220,7 +220,7 @@ random_seed = st.sidebar.number_input("Random seed", 0, 10_000_000, 57, step=1,
 st.sidebar.header("🧪 Testing")
 alpha = st.sidebar.number_input("Alpha (test size)", 0.0, 1.0, 0.1, step=0.01,
                                help="Significance level for hypothesis tests (per test).")
-mt_method = st.sidebar.selectbox("Multiple testing", ["FDR", "none"], index=0,
+mt_method = st.sidebar.selectbox("Multiple testing", ["fdr_bh", None], index=0,
                                 help="Multiple testing correction method for p-values.")
 test_type = st.sidebar.selectbox("p-value type", ["empirical", "fixed"], index=0,
                                 help="Use empirical p-values (e.g. from negative controls) or a fixed theoretical test.")
@@ -252,10 +252,30 @@ with left:
 
     fixed_cells = st.number_input("Fixed cells/element (for LFC/Guides/MOI/GeneMean)", 10, 1_000_000, 200, step=10,
                                  help="Number of cells per element used when sweeping LFC/Guides/MOI/Gene mean.")
-    min_val = st.number_input("Min", value=50,
-                             help="Lower bound of the sweep range for the selected x-axis parameter.")
-    max_val = st.number_input("Max", value=500,
-                             help="Upper bound of the sweep range for the selected x-axis parameter.",)
+    # min_val = st.number_input("Min", value=50.0,
+    #                          help="Lower bound of the sweep range for the selected x-axis parameter.")
+    # max_val = st.number_input("Max", value=500.0,
+    #                          help="Upper bound of the sweep range for the selected x-axis parameter.",)
+    if mode == "LFC":
+        min_val = st.number_input("Min", value=-1.0, step=0.1, format="%.3f", key="min_lfc")
+        max_val = st.number_input("Max", value=-0.2, step=0.1, format="%.3f", key="max_lfc")
+
+    elif mode == "MOI":
+        min_val = st.number_input("Min", value=1, step=1, key="min_moi")
+        max_val = st.number_input("Max", value=30, step=1, key="max_moi")
+
+    elif mode == "Gene mean (approx)":
+        min_val = st.number_input("Min", value=0.1, step=0.1, format="%.3f", key="min_gmean")
+        max_val = st.number_input("Max", value=5.0, step=0.1, format="%.3f", key="max_gmean")
+
+    elif mode == "Guides per element":
+        min_val = st.number_input("Min", min_value=1, value=1, step=1, key="min_guides")
+        max_val = st.number_input("Max", min_value=1, value=5, step=1, key="max_guides")
+
+    else:  # "Cells per element"
+        min_val = st.number_input("Min", min_value=1, value=50, step=10, key="min_cells")
+        max_val = st.number_input("Max", min_value=1, value=500, step=10, key="max_cells")
+
     n_bins = st.number_input("Bins (or points)", 2, 200, 5, step=1,
                             help="Number of points between Min and Max for the sweep.")
     step = st.number_input("Step (Guides mode only)", 1, 100, 1, step=1,

@@ -91,7 +91,7 @@ alpha = st.sidebar.selectbox(
 
 budget_eur = st.sidebar.number_input(
     "Budget (EUR)",
-    min_value=0.0, value=40000.0, step=1000.0, format="%.0f",
+    min_value=0.0, value=50000.0, step=1000.0, format="%.0f",
     help="Total available budget (euros).",
 )
 
@@ -138,7 +138,7 @@ if not st.session_state.run_pressed:
 cfg = DatasetConfig(
     dataset_name=dataset_name,
     test_type_ui="empirical",
-    mt_method="FDR",
+    mt_method="fdr_bh",
     alpha=alpha,
     #data_dir=Path(data_dir),
 )

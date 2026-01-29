@@ -38,7 +38,7 @@ def power_vs_cells(cells_min, cells_max, n_bins, cfg: SimulationConfig, tcfg: Te
                    abort_flag: Optional[Callable[[], bool]] = None) -> pd.DataFrame:
     print("ready to load resource")
     abort = abort_flag or (lambda: False)
-    model, mdata_real, reference_stats = load_resources(cfg)
+    model, mdata_real, reference_stats, _pristine_state = load_resources(cfg)
     new_genes_idx, element_gene_map, guide_efficacy = _precompute_static_structures(
         model, mdata_real, cfg, reference_stats
     )
@@ -66,7 +66,7 @@ def power_vs_cells(cells_min, cells_max, n_bins, cfg: SimulationConfig, tcfg: Te
             model, mdata_real, int(n_cpe),
             element_gene_map, element_by_gene_lfc,
             guide_efficacy, new_genes_idx,
-            cfg, reference_stats
+            cfg, reference_stats, _pristine_state
         )
         list_dict = _train_and_get_effects(mdata_sim, cfg.accelerator, cfg, tcfg, int(n_cpe), list_dict)
 
@@ -82,7 +82,7 @@ def power_vs_lfc(lfc_min: float, lfc_max: float, n_bins: int,
                  cfg: SimulationConfig, tcfg: TestConfig,
                  abort_flag: Optional[Callable[[], bool]] = None) -> pd.DataFrame:
     abort = abort_flag or (lambda: False)
-    model, mdata_real, reference_stats = load_resources(cfg)
+    model, mdata_real, reference_stats, _pristine_state = load_resources(cfg)
     new_genes_idx, element_gene_map, guide_efficacy = _precompute_static_structures(
         model, mdata_real, cfg, reference_stats
     )
@@ -108,7 +108,7 @@ def power_vs_lfc(lfc_min: float, lfc_max: float, n_bins: int,
             model, mdata_real, int(fixed_cells_per_element),
             element_gene_map, element_by_gene_lfc,
             guide_efficacy, new_genes_idx,
-            cfg_l, reference_stats
+            cfg_l, reference_stats, _pristine_state
         )
         list_dict = _train_and_get_effects(mdata_sim, cfg_l.accelerator, cfg_l, tcfg,
                                            int(fixed_cells_per_element), list_dict)
@@ -126,7 +126,7 @@ def power_vs_nguides(n_guides_min: int, n_guides_max: int, step: int,
                      cfg: SimulationConfig, tcfg: TestConfig,
                      abort_flag: Optional[Callable[[], bool]] = None) -> pd.DataFrame:
     abort = abort_flag or (lambda: False)
-    model, mdata_real, reference_stats = load_resources(cfg)
+    model, mdata_real, reference_stats, _pristine_state = load_resources(cfg)
     new_genes_idx, element_gene_map, _ = _precompute_static_structures(
         model, mdata_real, cfg, reference_stats
     )
@@ -156,7 +156,7 @@ def power_vs_nguides(n_guides_min: int, n_guides_max: int, step: int,
             model, mdata_real, int(fixed_cells_per_element),
             element_gene_map, element_by_gene_lfc,
             guide_eff, new_genes_idx,
-            cfg_g, reference_stats
+            cfg_g, reference_stats, _pristine_state
         )
         list_dict = _train_and_get_effects(mdata_sim, cfg_g.accelerator, cfg_g, tcfg,
                                            int(fixed_cells_per_element), list_dict)
@@ -173,7 +173,7 @@ def power_vs_moi(moi_min: float, moi_max: float, n_bins: int,
                  cfg: SimulationConfig, tcfg: TestConfig,
                  abort_flag: Optional[Callable[[], bool]] = None) -> pd.DataFrame:
     abort = abort_flag or (lambda: False)
-    model, mdata_real, reference_stats = load_resources(cfg)
+    model, mdata_real, reference_stats, _pristine_state = load_resources(cfg)
     new_genes_idx, element_gene_map, guide_efficacy = _precompute_static_structures(
         model, mdata_real, cfg, reference_stats
     )
@@ -202,7 +202,7 @@ def power_vs_moi(moi_min: float, moi_max: float, n_bins: int,
             model, mdata_real, int(fixed_cells_per_element),
             element_gene_map, element_by_gene_lfc,
             guide_efficacy, new_genes_idx,
-            cfg_m, reference_stats
+            cfg_m, reference_stats, _pristine_state
         )
         list_dict = _train_and_get_effects(mdata_sim, cfg_m.accelerator, cfg_m, tcfg,
                                            int(fixed_cells_per_element), list_dict)
@@ -223,7 +223,7 @@ def power_vs_gene_mean(mean_min: float, mean_max: float, n_bins: int,
     relative to the original dataset mean for cfg.gene_name.
     """
     abort = abort_flag or (lambda: False)
-    model, mdata_real, reference_stats = load_resources(cfg)
+    model, mdata_real, reference_stats, _pristine_state = load_resources(cfg)
     new_genes_idx, element_gene_map, guide_efficacy = _precompute_static_structures(
         model, mdata_real, cfg, reference_stats
     )
@@ -258,7 +258,7 @@ def power_vs_gene_mean(mean_min: float, mean_max: float, n_bins: int,
             model, mdata_real, int(fixed_cells_per_element),
             element_gene_map, element_by_gene_lfc,
             guide_efficacy, new_genes_idx,
-            cfg_m, reference_stats
+            cfg_m, reference_stats, _pristine_state
         )
         list_dict = _train_and_get_effects(mdata_sim, cfg_m.accelerator, cfg_m, tcfg,
                                            int(fixed_cells_per_element), list_dict)
